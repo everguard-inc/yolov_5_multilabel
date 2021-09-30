@@ -526,7 +526,6 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         x['results'] = nf, nm, ne, nc, len(self.img_files)
         x['msgs'] = msgs  # warnings
         x['version'] = self.cache_version  # cache version
-        np.save('preds/cache.npy',x)
         try:
             np.save(path, x)  # save cache for next time
             path.with_suffix('.cache.npy').rename(path)  # remove .npy suffix

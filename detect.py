@@ -34,9 +34,9 @@ from utils.torch_utils import predicts_to_multilabel
 def run(weights='yolov5s.pt',  # model.pt path(s)
         source='data/images',  # file/dir/URL/glob, 0 for webcam
         imgsz=640,  # inference size (pixels)
-        conf_thres=0.25,  # confidence threshold
-        iou_thres=0.45,  # NMS IOU threshold
-        iou_thres_post = 0.98,
+        conf_thres=0.5,  # confidence threshold
+        iou_thres=0.5,  # NMS IOU threshold
+        iou_thres_post = 0.9,
         max_det=1000,  # maximum detections per image
         device='',  # cuda device, i.e. 0 or 0,1,2,3 or cpu
         view_img=False,  # show results
@@ -171,6 +171,9 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
         dt[1] += t3 - t2
         # NMS
         pred = non_max_suppression(pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det)[0]
+        print('pred')
+        print(pred)
+        print()
         start = time.time()
         if pred.shape[0]>1:
             pred = predicts_to_multilabel(pred,iou_thres_post,conf_thres)
@@ -178,27 +181,28 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
             pred = pred.unsqueeze(0)
         end = time.time()
         print("Time = ",end-start)
+        print('pred after')
+        print(pred)
+        print()
         dt[2] += time_sync() - t3
         # Second-stage classifier (optional)
         if classify:
             pred = apply_classifier(pred, modelc, img, im0s)
-        
+        if webcam:  # batch_size >= 1
+            p, im0, frame = path[i], im0s[i].copy(), dataset.count
+        else:
+            p, im0, frame = path, im0s.copy(), getattr(dataset, 'frame', 0)
+        p = Path(p)  # to Path
+        save_path = str(save_dir / p.name)  # img.jpg
+        txt_path = str(save_dir / 'labels' / p.stem) + ('' if dataset.mode == 'image' else f'_{frame}')  # img.txt
+        gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
+        imc = im0.copy() if save_crop else im0  # for save_crop
+        annotator = Annotator(im0, line_width=line_thickness, pil=not ascii)
         # Process predictions
         for i, det in enumerate(pred):  # per image
-            seen += 1
-            if webcam:  # batch_size >= 1
-                p, s, im0, frame = path[i], f'{i}: ', im0s[i].copy(), dataset.count
-            else:
-                p, s, im0, frame = path, '', im0s.copy(), getattr(dataset, 'frame', 0)
-
-            p = Path(p)  # to Path
-            save_path = str(save_dir / p.name)  # img.jpg
-            txt_path = str(save_dir / 'labels' / p.stem) + ('' if dataset.mode == 'image' else f'_{frame}')  # img.txt
-            gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
-            imc = im0.copy() if save_crop else im0  # for save_crop
-            annotator = Annotator(im0, line_width=line_thickness, pil=not ascii)
             if len(det):
                 # Rescale boxes from img_size to im0 size
+                s = ''
                 det[:4] = scale_coords(img.shape[2:], det[:4], im0.shape).round()
                 labels = det[0,4:].cpu().numpy().astype(int)
                 # Print results
@@ -247,8 +251,6 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
                     vid_writer[i].write(im0)
 
     # Print results
-    t = tuple(x / seen * 1E3 for x in dt)  # speeds per image
-    print(f'Speed: %.1fms pre-process, %.1fms inference, %.1fms NMS per image at shape {(1, 3, *imgsz)}' % t)
     if save_txt or save_img:
         s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if save_txt else ''
         print(f"Results saved to {colorstr('bold', save_dir)}{s}")
