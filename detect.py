@@ -26,8 +26,8 @@ from utils.general import apply_classifier, check_img_size, check_imshow, check_
     increment_path, is_ascii, non_max_suppression, print_args, save_one_box, scale_coords, set_logging, \
     strip_optimizer, xyxy2xywh
 from utils.plots import Annotator, colors
-from utils.torch_utils import load_classifier, select_device, time_sync
-from utils.torch_utils import predicts_to_multilabel
+from utils.torch_utils import load_classifier, predicts_to_multilabel_numpy, select_device, time_sync
+from utils.torch_utils import predicts_to_multilabel, predicts_to_multilabel_numpy
 
 
 @torch.no_grad()
@@ -171,19 +171,17 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
         dt[1] += t3 - t2
         # NMS
         pred = non_max_suppression(pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det)[0]
+        pred = pred.detach().cpu().numpy()
         print('pred')
         print(pred)
         print()
         start = time.time()
         if pred.shape[0]>1:
-            pred = predicts_to_multilabel(pred,iou_thres_post,conf_thres)
+            pred = predicts_to_multilabel_numpy(pred,iou_thres_post,conf_thres)
         else:
-            pred = pred.unsqueeze(0)
+            pred = np.expand_dims(pred, 0)
         end = time.time()
         print("Time = ",end-start)
-        print('pred after')
-        print(pred)
-        print()
         dt[2] += time_sync() - t3
         # Second-stage classifier (optional)
         if classify:
@@ -204,7 +202,7 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
                 # Rescale boxes from img_size to im0 size
                 s = ''
                 det[:4] = scale_coords(img.shape[2:], det[:4], im0.shape).round()
-                labels = det[0,4:].cpu().numpy().astype(int)
+                labels = det[0,4:].astype(int)
                 # Print results
                 for c in labels:
                     s += f"{c};"  # add to string
