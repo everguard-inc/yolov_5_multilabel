@@ -33,11 +33,11 @@ from utils.torch_utils import predicts_to_multilabel, predicts_to_multilabel_num
 @torch.no_grad()
 def run(weights='yolov5s.pt',  # model.pt path(s)
         source='data/images',  # file/dir/URL/glob, 0 for webcam
-        imgsz=640,  # inference size (pixels)
+        imgsz=736,  # inference size (pixels)
         conf_thres=0.5,  # confidence threshold
         iou_thres=0.5,  # NMS IOU threshold
-        iou_thres_post = 0.9,
-        max_det=1000,  # maximum detections per image
+        iou_thres_post = 0.95,
+        max_det=100,  # maximum detections per image
         device='',  # cuda device, i.e. 0 or 0,1,2,3 or cpu
         view_img=False,  # show results
         save_txt=False,  # save results to *.txt
@@ -55,7 +55,7 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
         line_thickness=3,  # bounding box thickness (pixels)
         hide_labels=False,  # hide labels
         hide_conf=False,  # hide confidences
-        half=False,  # use FP16 half-precision inference
+        half=True,  # use FP16 half-precision inference
         ):
     save_img = not nosave and not source.endswith('.txt')  # save inference images
     webcam = source.isnumeric() or source.endswith('.txt') or source.lower().startswith(
@@ -75,6 +75,7 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
     classify, suffix, suffixes = False, Path(w).suffix.lower(), ['.pt', '.onnx', '.tflite', '.pb', '']
     check_suffix(w, suffixes)  # check weights have acceptable suffix
     pt, onnx, tflite, pb, saved_model = (suffix == x for x in suffixes)  # backend booleans
+
     stride, names = 64, [f'class{i}' for i in range(1000)]  # assign defaults
     if pt:
         model = attempt_load(weights, map_location=device)  # load FP32 model
@@ -126,9 +127,9 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
     # Run inference
     if pt and device.type != 'cpu':
         model(torch.zeros(1, 3, *imgsz).to(device).type_as(next(model.parameters())))  # run once
-    dt, seen = [0.0, 0.0, 0.0], 0
+    time_file = open("runs/detect/time.txt", "a")
     for path, img, im0s, vid_cap in dataset:
-        t1 = time_sync()
+        start = time.time()
         if onnx:
             img = img.astype('float32')
         else:
@@ -137,8 +138,6 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
         img = img / 255.0  # 0 - 255 to 0.0 - 1.0
         if len(img.shape) == 3:
             img = img[None]  # expand for batch dim
-        t2 = time_sync()
-        dt[0] += t2 - t1
 
         # Inference
         if pt:
@@ -167,22 +166,13 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
             pred[..., 2] *= imgsz[1]  # w
             pred[..., 3] *= imgsz[0]  # h
             pred = torch.tensor(pred)
-        t3 = time_sync()
-        dt[1] += t3 - t2
         # NMS
         pred = non_max_suppression(pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det)[0]
         pred = pred.detach().cpu().numpy()
-        print('pred')
-        print(pred)
-        print()
-        start = time.time()
         if pred.shape[0]>1:
             pred = predicts_to_multilabel_numpy(pred,iou_thres_post,conf_thres)
         else:
             pred = np.expand_dims(pred, 0)
-        end = time.time()
-        print("Time = ",end-start)
-        dt[2] += time_sync() - t3
         # Second-stage classifier (optional)
         if classify:
             pred = apply_classifier(pred, modelc, img, im0s)
@@ -190,6 +180,8 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
             p, im0, frame = path[i], im0s[i].copy(), dataset.count
         else:
             p, im0, frame = path, im0s.copy(), getattr(dataset, 'frame', 0)
+        end = time.time()
+        time_file.write(f'{end-start}\n')
         p = Path(p)  # to Path
         save_path = str(save_dir / p.name)  # img.jpg
         txt_path = str(save_dir / 'labels' / p.stem) + ('' if dataset.mode == 'image' else f'_{frame}')  # img.txt
@@ -221,8 +213,6 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
                         if save_crop:
                             save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
             # Print time (inference-only)
-            print(f'{s}Done. ({t3 - t2:.3f}s)')
-
             # Stream results
             im0 = annotator.result()
             if view_img:
@@ -234,10 +224,11 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
                 if dataset.mode == 'image':
                     cv2.imwrite(save_path, im0)
                 else:  # 'video' or 'stream'
-                    if vid_path[i] != save_path:  # new video
-                        vid_path[i] = save_path
-                        if isinstance(vid_writer[i], cv2.VideoWriter):
-                            vid_writer[i].release()  # release previous video writer
+                    print(vid_path)
+                    if vid_path[0] != save_path:  # new video
+                        vid_path[0] = save_path
+                        if isinstance(vid_writer[0], cv2.VideoWriter):
+                            vid_writer[0].release()  # release previous video writer
                         if vid_cap:  # video
                             fps = vid_cap.get(cv2.CAP_PROP_FPS)
                             w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -245,13 +236,13 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
                         else:  # stream
                             fps, w, h = 30, im0.shape[1], im0.shape[0]
                             save_path += '.mp4'
-                        vid_writer[i] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
-                    vid_writer[i].write(im0)
+                        vid_writer[0] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
+                    vid_writer[0].write(im0)
 
     # Print results
     if save_txt or save_img:
         s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if save_txt else ''
-        print(f"Results saved to {colorstr('bold', save_dir)}{s}")
+        #print(f"Results saved to {colorstr('bold', save_dir)}{s}")
     if update:
         strip_optimizer(weights)  # update model (to fix SourceChangeWarning)
 
