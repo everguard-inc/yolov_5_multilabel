@@ -256,7 +256,6 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     # nw = min(nw, (epochs - start_epoch) / 2 * nb)  # limit warmup to < 1/2 of training
     last_opt_step = -1
     maps = np.zeros(nc)  # mAP per class
-    results = (0, 0, 0, 0, 0, 0, 0)  # P, R, mAP@.5, mAP@.5-.95, val_loss(box, obj, cls)
     scheduler.last_epoch = start_epoch - 1  # do not move
     scaler = amp.GradScaler(enabled=cuda)
     stopper = EarlyStopping(patience=opt.patience)
@@ -361,7 +360,6 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                                            plots=plots and final_epoch,
                                            callbacks=callbacks,
                                            compute_loss=compute_loss)
-
             # Update best mAP
             fi = fitness(np.array(results).reshape(1, -1))  # weighted combination of [P, R, mAP@.5, mAP@.5-.95]
             if fi > best_fitness:
@@ -592,7 +590,7 @@ def main(opt, callbacks=Callbacks()):
             results = train(hyp.copy(), opt, device, callbacks)
 
             # Write mutation results
-            print_mutation(results, hyp.copy(), save_dir, opt.bucket)
+            #print_mutation(results, hyp.copy(), save_dir, opt.bucket)
 
         # Plot results
         plot_evolve(evolve_csv)

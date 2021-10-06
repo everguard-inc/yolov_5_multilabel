@@ -14,7 +14,6 @@ import cv2
 import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
-
 FILE = Path(__file__).resolve()
 ROOT = FILE.parents[0]  # YOLOv5 root directory
 if str(ROOT) not in sys.path:
@@ -27,7 +26,7 @@ from utils.general import apply_classifier, check_img_size, check_imshow, check_
     strip_optimizer, xyxy2xywh
 from utils.plots import Annotator, colors
 from utils.torch_utils import load_classifier, predicts_to_multilabel_numpy, select_device, time_sync
-from utils.torch_utils import predicts_to_multilabel, predicts_to_multilabel_numpy
+from utils.metrics import predicts_to_multilabel_numpy
 
 
 @torch.no_grad()

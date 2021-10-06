@@ -11,12 +11,124 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-
 def fitness(x):
     # Model fitness as a weighted combination of metrics
     w = [0.0, 0.0, 0.1, 0.9]  # weights for [P, R, mAP@0.5, mAP@0.5:0.95]
     return (x[:, :4] * w).sum(1)
 
+def calculate_metrics(predicts : torch.tensor, targets: torch.tensor):
+    pass
+
+def iou_batch_numpy(bb_test, bb_gt):
+    bb_gt = np.expand_dims(bb_gt, 0)
+    bb_test = np.expand_dims(bb_test, 1)
+    xx1 = np.maximum(bb_test[..., 0], bb_gt[..., 0])
+    yy1 = np.maximum(bb_test[..., 1], bb_gt[..., 1])
+    xx2 = np.minimum(bb_test[..., 2], bb_gt[..., 2])
+    yy2 = np.minimum(bb_test[..., 3], bb_gt[..., 3])
+    w = np.maximum(0, xx2 - xx1)
+    h = np.maximum(0, yy2 - yy1)
+    wh = w * h
+    iou_matrix = wh / ((bb_test[..., 2] - bb_test[..., 0]) * (bb_test[..., 3] - bb_test[..., 1])
+              + (bb_gt[..., 2] - bb_gt[..., 0]) * (bb_gt[..., 3] - bb_gt[..., 1]) - wh)
+    return iou_matrix
+
+def predicts_to_multilabel_numpy(predicts : np.ndarray, iou_th : float, conf_th : float) -> torch.tensor:
+    predicts = predicts[(predicts[...,4]>=conf_th).nonzero()[0]]
+    iou_matrix = iou_batch_numpy(predicts,predicts)
+    iou_matrix = np.triu(iou_matrix,1)
+    matched_indices = np.c_[(iou_matrix>iou_th).nonzero()]
+    new_matched_indices = []
+    unique = np.array([])
+    for ids in range(len(matched_indices)):
+        if len(unique)==0:
+            unique = np.concatenate((unique,matched_indices[ids]),0)
+        else:
+            if matched_indices[ids][0] in unique or matched_indices[ids][1] in unique:
+                unique = np.concatenate((unique,matched_indices[ids]),0)
+            else:
+                new_matched_indices.append(np.unique(unique).astype(int))
+                unique = np.array([])
+                unique = np.concatenate((unique,matched_indices[ids]),0)
+        if ids==len(matched_indices)-1:
+            new_matched_indices.append(np.unique(unique).astype(int))
+    new_predicts = []
+    for ids in new_matched_indices:
+        new_pr = predicts[ids]
+        new_pr = np.concatenate((new_pr[0][:4],new_pr[:,5]))
+        new_predicts.append(np.expand_dims(new_pr, 0))
+    return new_predicts
+
+def bb_intersection_over_union(boxA, boxB):
+    xA = max(boxA[0], boxB[0])
+    yA = max(boxA[1], boxB[1])
+    xB = min(boxA[2], boxB[2])
+    yB = min(boxA[3], boxB[3])
+    interArea = (xB - xA) * (yB - yA)
+    boxAArea = (boxA[2] - boxA[0]) * (boxA[3] - boxA[1])
+    boxBArea = (boxB[2] - boxB[0]) * (boxB[3] - boxB[1])
+
+    iou = interArea / float(boxAArea + boxBArea - interArea)
+
+    return abs(iou)
+
+def get_metrics_per_image(predicts,targets,iou_th):
+    metrics = {'tp':0,'fp':0,'fn':0,'tn':0}
+    matched_indexes = []
+    for predict_i,predict in enumerate(predicts):    
+        for target_i,target in enumerate(targets):
+            pred = predict[0]
+            print('\ntarget = ')
+            print(target)
+            print('\npred = ')
+            print(pred)
+            try:
+                iou = bb_intersection_over_union(target[-4:],pred[:4])
+            except:
+                iou = 0
+            if iou>=iou_th:
+                matched_indexes.append((predict_i,target_i))
+                break
+            else:
+                metrics['fp']+=1
+                metrics['fn']+=1
+    return matched_indexes,metrics
+
+def encode_labels(predict_labels,num_classes):
+    encode_labels = np.zeros((num_classes))
+    for label in predict_labels:
+        label = int(label)
+        encode_labels[label] = 1
+    return encode_labels
+
+def get_f1_per_image(predicts,targets,matched_indexes,metrics):
+    for matched in matched_indexes:
+        predicted_labels = encode_labels(predicts[matched[0]][0][4:],num_classes=9)
+        target_labels = targets[matched[1]][1:-4]
+        for i in range(len(target_labels)):
+            if target_labels[i]==predicted_labels[i]:
+                metrics['tp'] +=1
+            else:
+                metrics['fp'] +=1
+                metrics['fn']+=1
+    recall = metrics['tp']/(metrics['tp']+metrics['fp'])
+    precision = metrics['tp']/(metrics['tp']+metrics['fn'])
+    f1 = 2*precision*recall/(precision+recall)
+    return f1
+
+def get_f1_per_batch(predicts_batch,targets_batch,iou_th):
+    f1 = 0
+    for predicts_index,predicts in enumerate(predicts_batch):
+        predicts = predicts.detach().cpu().numpy()
+        if predicts.shape[0]>1:
+            predicts = predicts_to_multilabel_numpy(predicts,iou_th = 0.9, conf_th = 0)
+        else:
+            predicts = np.expand_dims(predicts, 0)
+        targets = targets_batch[(targets_batch[...,0]==predicts_index).nonzero()[0]]
+        matched_indexes,metrics = get_metrics_per_image(predicts,targets,iou_th)
+        f1 += get_f1_per_image(predicts,targets,matched_indexes,metrics)
+    f1/= len(predicts_batch)
+    return f1     
 
 def ap_per_class(tp, conf, pred_cls, target_cls, plot=False, save_dir='.', names=()):
     """ Compute the average precision, given the recall and precision curves.
@@ -31,14 +143,13 @@ def ap_per_class(tp, conf, pred_cls, target_cls, plot=False, save_dir='.', names
     # Returns
         The average precision as computed in py-faster-rcnn.
     """
-
     # Sort by objectness
     i = np.argsort(-conf)
     tp, conf, pred_cls = tp[i], conf[i], pred_cls[i]
 
     # Find unique classes
     unique_classes = np.unique(target_cls)
-    nc = unique_classes.shape[0]  # number of classes, number of detections
+    nc = unique_classes.shape[0]  #number of classes, number of detections
 
     # Create Precision-Recall curve and compute AP for each class
     px, py = np.linspace(0, 1, 1000), []  # for plotting
@@ -78,6 +189,8 @@ def ap_per_class(tp, conf, pred_cls, target_cls, plot=False, save_dir='.', names
         plot_mc_curve(px, r, Path(save_dir) / 'R_curve.png', names, ylabel='Recall')
 
     i = f1.mean(0).argmax()  # max F1 index
+    print('\n\n p[:, i], r[:, i], ap, f1[:, i], unique_classes\n')
+    print(p[:, i], r[:, i], ap, f1[:, i], unique_classes.astype('int32'))
     return p[:, i], r[:, i], ap, f1[:, i], unique_classes.astype('int32')
 
 
