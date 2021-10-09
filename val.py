@@ -12,7 +12,7 @@ import os
 import sys
 from pathlib import Path
 from threading import Thread
-
+from copy import deepcopy
 import numpy as np
 import torch
 #from torch._C import float16
@@ -22,7 +22,7 @@ FILE = Path(__file__).resolve()
 ROOT = FILE.parents[0]  # YOLOv5 root directory
 if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))  # add ROOT to PATH
-
+import cv2
 from models.experimental import attempt_load
 from utils.datasets import create_dataloader
 from utils.general import coco80_to_coco91_class, check_dataset, check_img_size, check_requirements, \
@@ -32,7 +32,7 @@ from utils.metrics import ap_per_class, ConfusionMatrix
 from utils.plots import output_to_target, plot_images, plot_val_study
 from utils.torch_utils import select_device, time_sync
 from utils.callbacks import Callbacks
-from utils.metrics import get_f1_per_batch
+from utils.metrics import get_metrics
 
 def save_one_txt(predn, save_conf, shape, file):
     # Save one txt result
@@ -85,8 +85,8 @@ def run(data,
         weights=None,  # model.pt path(s)
         batch_size=32,  # batch size
         imgsz=640,  # inference size (pixels)
-        conf_thres=0.001,  # confidence threshold
-        iou_thres=0.6,  # NMS IoU threshold
+        conf_thres=0.5,  # confidence threshold
+        iou_thres=0.9,  # NMS IoU threshold
         task='val',  # train, val, test, speed or study
         device='',  # cuda device, i.e. 0 or 0,1,2,3 or cpu
         single_cls=False,  # treat as single-class dataset
@@ -141,18 +141,24 @@ def run(data,
     model.eval()
     is_coco = isinstance(data.get('val'), str) and data['val'].endswith('coco/val2017.txt')  # COCO dataset
     nc = 1 if single_cls else int(data['nc'])  # number of classes
-
     # Dataloader
     if not training:
         if device.type != 'cpu':
             model(torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(next(model.parameters())))  # run once
         task = task if task in ('train', 'val', 'test') else 'val'  # path to train/val/test images
-        dataloader = create_dataloader(data[task], imgsz, batch_size, gs, single_cls, pad=0.5, rect=True,
+        dataloader = create_dataloader(data[task], imgsz, batch_size, gs, single_cls, pad=0, rect=True,
                                        prefix=colorstr(f'{task}: '))[0]
 
     dt = [0.0, 0.0, 0.0]
     loss = torch.zeros(3, device=device)
-    f1 = 0
+    nc = 9
+    metrics_dict = {'tp':0,'tn':0,'fp':0,'fn':0}
+    metrics_05 = []
+    metrics_09 = []
+    for _ in range(nc):
+        metrics_05.append(deepcopy(metrics_dict))
+        metrics_09.append(deepcopy(metrics_dict))
+    f1_05, f1_09 = [0 for i in range(nc)], [0 for i in range(nc)]
     for batch_i, (img, targets, paths, shapes) in enumerate(tqdm(dataloader)):
         t1 = time_sync()
         img = img.to(device, non_blocking=True)
@@ -162,7 +168,6 @@ def run(data,
         nb, _, height, width = img.shape  # batch size, channels, height, width
         t2 = time_sync()
         dt[0] += t2 - t1
-
         # Run model
         out, train_out = model(img, augment=augment)  # inference and training outputs
         dt[1] += time_sync() - t2
@@ -173,15 +178,22 @@ def run(data,
         # Run NMS
         targets[:, -4:] *= torch.Tensor([width, height, width, height]).to(device)  # to pixels
         lb = [targets[targets[:, 0] == i, 1:] for i in range(nb)] if save_hybrid else []  # for autolabelling
+        targets[:,-4:] = xywh2xyxy(targets[:,-4:])
         t3 = time_sync()
         out = non_max_suppression(out, conf_thres, iou_thres, labels=lb, multi_label=True, agnostic=single_cls)
         targets = targets.detach().cpu().numpy()
-        f1 += get_f1_per_batch(out,targets,0.9)
+        #img = img.detach().cpu().numpy()
+        metrics_05 = get_metrics(out,targets,metrics_05,0.5,0.5)
+        metrics_09 = get_metrics(out,targets,metrics_09,0.9,0.5)
+    for i in range(nc):
+        pr_05 = metrics_05[i]['tp'] / (metrics_05[i]['tp']+metrics_05[i]['fp'] + 1e-9)
+        recall_05 = metrics_05[i]['tp'] / (metrics_05[i]['tp']+metrics_05[i]['fn'] + 1e-9)
+        pr_09 = metrics_09[i]['tp'] / (metrics_09[i]['tp']+metrics_09[i]['fp'] + 1e-9)
+        recall_09 = metrics_09[i]['tp'] / (metrics_09[i]['tp']+metrics_09[i]['fn'] + 1e-9)
+        f1_05[i] = round(2 * pr_05 * recall_05/(pr_05 + recall_05 + 1e-9),2)
+        f1_09[i] = round(2 * pr_09 * recall_09/(pr_09+recall_09 + 1e-9),2)
 
-        
-    f1 /= len(dataloader) 
-
-    return (f1, *(loss.cpu() / len(dataloader)).tolist())
+    return f1_05, f1_09, (loss.cpu() / len(dataloader)).tolist()
 
 
 def parse_opt():

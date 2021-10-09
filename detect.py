@@ -25,7 +25,7 @@ from utils.general import apply_classifier, check_img_size, check_imshow, check_
     increment_path, is_ascii, non_max_suppression, print_args, save_one_box, scale_coords, set_logging, \
     strip_optimizer, xyxy2xywh
 from utils.plots import Annotator, colors
-from utils.torch_utils import load_classifier, predicts_to_multilabel_numpy, select_device, time_sync
+from utils.torch_utils import load_classifier, select_device, time_sync
 from utils.metrics import predicts_to_multilabel_numpy
 
 
@@ -35,7 +35,7 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
         imgsz=736,  # inference size (pixels)
         conf_thres=0.5,  # confidence threshold
         iou_thres=0.5,  # NMS IOU threshold
-        iou_thres_post = 0.95,
+        iou_thres_post = 0.8,
         max_det=100,  # maximum detections per image
         device='',  # cuda device, i.e. 0 or 0,1,2,3 or cpu
         view_img=False,  # show results
@@ -167,6 +167,8 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
             pred = torch.tensor(pred)
         # NMS
         pred = non_max_suppression(pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det)[0]
+        print('\npreds')
+        print(pred)
         pred = pred.detach().cpu().numpy()
         if pred.shape[0]>1:
             pred = predicts_to_multilabel_numpy(pred,iou_thres_post,conf_thres)
@@ -193,6 +195,7 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
                 # Rescale boxes from img_size to im0 size
                 s = ''
                 det[:4] = scale_coords(img.shape[2:], det[:4], im0.shape).round()
+                print()
                 labels = det[0,4:].astype(int)
                 # Print results
                 for c in labels:

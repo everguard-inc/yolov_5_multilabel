@@ -10,6 +10,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+import cv2
 
 def fitness(x):
     # Model fitness as a weighted combination of metrics
@@ -59,76 +60,92 @@ def predicts_to_multilabel_numpy(predicts : np.ndarray, iou_th : float, conf_th 
         new_predicts.append(np.expand_dims(new_pr, 0))
     return new_predicts
 
-def bb_intersection_over_union(boxA, boxB):
-    xA = max(boxA[0], boxB[0])
-    yA = max(boxA[1], boxB[1])
-    xB = min(boxA[2], boxB[2])
-    yB = min(boxA[3], boxB[3])
-    interArea = (xB - xA) * (yB - yA)
-    boxAArea = (boxA[2] - boxA[0]) * (boxA[3] - boxA[1])
-    boxBArea = (boxB[2] - boxB[0]) * (boxB[3] - boxB[1])
 
-    iou = interArea / float(boxAArea + boxBArea - interArea)
+def bbox_iou_numpy(bb1, bb2):
+    assert bb1[0] < bb1[2]
+    assert bb1[1] < bb1[3]
+    assert bb2[0] < bb2[2]
+    assert bb2[1] < bb2[3]
 
-    return abs(iou)
+    x_left = max(bb1[0], bb2[0])
+    y_top = max(bb1[1], bb2[1])
+    x_right = min(bb1[2], bb2[2])
+    y_bottom = min(bb1[3], bb2[3])
 
-def get_metrics_per_image(predicts,targets,iou_th):
-    metrics = {'tp':0,'fp':0,'fn':0,'tn':0}
-    matched_indexes = []
-    for predict_i,predict in enumerate(predicts):    
-        for target_i,target in enumerate(targets):
-            pred = predict[0]
-            print('\ntarget = ')
-            print(target)
-            print('\npred = ')
-            print(pred)
-            try:
-                iou = bb_intersection_over_union(target[-4:],pred[:4])
-            except:
-                iou = 0
-            if iou>=iou_th:
-                matched_indexes.append((predict_i,target_i))
-                break
+    if x_right < x_left or y_bottom < y_top:
+        return 0.0
+
+    intersection_area = (x_right - x_left) * (y_bottom - y_top)
+
+    bb1_area = (bb1[2] - bb1[0]) * (bb1[3] - bb1[1])
+    bb2_area = (bb2[2] - bb2[0]) * (bb2[3] - bb2[1])
+
+    iou = intersection_area / float(bb1_area + bb2_area - intersection_area)
+    assert iou >= 0.0
+    assert iou <= 1.0
+    return iou
+
+def get_metrics_per_class(predicts,targets,iou_th,metrics):
+    for predict in predicts:
+        predicted_label = int(predict[-1])
+        predicted_box = predict[:4]
+        if len(targets) == 0:
+            metrics[predicted_label]['fp']+=1
+        else:
+            iou_all = np.array([bbox_iou_numpy(target[-4:],predicted_box) for target in targets])
+            if (iou_all >= iou_th).any():
+                matched_targets_index = np.where(iou_all>=iou_th)[0]
+                matched_targets = targets[matched_targets_index]
+                all_matched_labels = []
+                for target in matched_targets:
+                    target_labels = decode_labels(target[1:-4])
+                    for label in target_labels:
+                        all_matched_labels.append(label)
+                if predicted_label in all_matched_labels:
+                    metrics[predicted_label]['tp']+=1
+                else:
+                    metrics[predicted_label]['fn']+=1
+                    metrics[predicted_label]['fp']+=1
             else:
-                metrics['fp']+=1
-                metrics['fn']+=1
-    return matched_indexes,metrics
+                metrics[predicted_label]['fn']+=1
+    return metrics
 
-def encode_labels(predict_labels,num_classes):
+def get_metrics(out,targets,metrics,iou_th,conf_th):
+    for index, predicts in enumerate(out):
+        predicts_index = (predicts[...,-2]>=conf_th).nonzero().squeeze()
+        temp_targets = targets[(targets[...,0]==index).nonzero()[0]].astype(int)
+        temp_predicts = predicts[predicts_index]
+        if len(temp_predicts)==0:
+            all_target_labels = []
+            for target in temp_targets:
+                    target_labels = decode_labels(target[1:-4])
+                    for label in target_labels:
+                        all_target_labels.append(label)
+            all_target_labels = list(set(all_target_labels))    
+            for label in all_target_labels:
+                metrics[label]['fn']+=1
+        else:
+            if len(temp_predicts.shape)<2:
+                temp_predicts = torch.unsqueeze(temp_predicts, 0)
+            temp_predicts =  temp_predicts.detach().cpu().numpy().astype(int)
+            metrics = get_metrics_per_class(temp_predicts,temp_targets,iou_th,metrics)
+    return metrics
+
+
+def decode_labels(labels):
+    labels_cat = []
+    for i,label in enumerate(labels):
+        if label==1:
+            labels_cat.append(i)
+    return labels_cat
+
+def encode_labels(labels,num_classes):
     encode_labels = np.zeros((num_classes))
-    for label in predict_labels:
+    for label in labels:
         label = int(label)
         encode_labels[label] = 1
     return encode_labels
 
-def get_f1_per_image(predicts,targets,matched_indexes,metrics):
-    for matched in matched_indexes:
-        predicted_labels = encode_labels(predicts[matched[0]][0][4:],num_classes=9)
-        target_labels = targets[matched[1]][1:-4]
-        for i in range(len(target_labels)):
-            if target_labels[i]==predicted_labels[i]:
-                metrics['tp'] +=1
-            else:
-                metrics['fp'] +=1
-                metrics['fn']+=1
-    recall = metrics['tp']/(metrics['tp']+metrics['fp'])
-    precision = metrics['tp']/(metrics['tp']+metrics['fn'])
-    f1 = 2*precision*recall/(precision+recall)
-    return f1
-
-def get_f1_per_batch(predicts_batch,targets_batch,iou_th):
-    f1 = 0
-    for predicts_index,predicts in enumerate(predicts_batch):
-        predicts = predicts.detach().cpu().numpy()
-        if predicts.shape[0]>1:
-            predicts = predicts_to_multilabel_numpy(predicts,iou_th = 0.9, conf_th = 0)
-        else:
-            predicts = np.expand_dims(predicts, 0)
-        targets = targets_batch[(targets_batch[...,0]==predicts_index).nonzero()[0]]
-        matched_indexes,metrics = get_metrics_per_image(predicts,targets,iou_th)
-        f1 += get_f1_per_image(predicts,targets,matched_indexes,metrics)
-    f1/= len(predicts_batch)
-    return f1     
 
 def ap_per_class(tp, conf, pred_cls, target_cls, plot=False, save_dir='.', names=()):
     """ Compute the average precision, given the recall and precision curves.

@@ -143,11 +143,11 @@ class ComputeLoss:
                             t[range(n), tcls[i]] = self.cp
                             lcls += self.BCEcls(ps[:, 5:], t)  # BCE
                         else:
-                            #print('\ntargets')
-                            #print(tcls[i])
                             lcls += self.BCEcls(ps[:, 5:], tcls[i].float())
                 except:
-                    print('\nTarget size must be the same as input size\n')
+                    #print('Target size must be the same as input size')
+                    pass
+            
             obji = self.BCEobj(pi[..., 4], tobj)
             lobj += obji * self.balance[i]  # obj loss
             if self.autobalance:

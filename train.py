@@ -347,8 +347,8 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             callbacks.run('on_train_epoch_end', epoch=epoch)
             ema.update_attr(model, include=['yaml', 'nc', 'hyp', 'names', 'stride', 'class_weights'])
             final_epoch = (epoch + 1 == epochs) or stopper.possible_stop
-            if not noval or final_epoch:  # Calculate mAP
-                results, maps, _ = val.run(data_dict,
+            if not noval or final_epoch:  # Calculate f1
+                f1_05,f1_09,loss = val.run(data_dict,
                                            batch_size=batch_size // WORLD_SIZE * 2,
                                            imgsz=imgsz,
                                            model=ema.ema,
@@ -360,12 +360,10 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                                            plots=plots and final_epoch,
                                            callbacks=callbacks,
                                            compute_loss=compute_loss)
-            # Update best mAP
-            fi = fitness(np.array(results).reshape(1, -1))  # weighted combination of [P, R, mAP@.5, mAP@.5-.95]
+            print(f'\nf1_05 = {f1_05}, f1_09 = {f1_09}, loss = {loss}\n')
+            fi = np.array(f1_05).mean()*0.1 + np.array(f1_09).mean()*0.9 
             if fi > best_fitness:
                 best_fitness = fi
-            log_vals = list(mloss) + list(results) + lr
-            callbacks.run('on_fit_epoch_end', log_vals, epoch, best_fitness, fi)
 
             # Save model
             if (not nosave) or (final_epoch and not evolve):  # if save
