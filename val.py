@@ -193,6 +193,9 @@ def run(data,
         f1_05[i] = round(2 * pr_05 * recall_05/(pr_05 + recall_05 + 1e-9),2)
         f1_09[i] = round(2 * pr_09 * recall_09/(pr_09+recall_09 + 1e-9),2)
 
+    print('f1_05 = ',f1_05)
+    print('f1_09 = ',f1_09)
+    print()
     return f1_05, f1_09, (loss.cpu() / len(dataloader)).tolist()
 
 

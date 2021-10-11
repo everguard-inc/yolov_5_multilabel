@@ -29,6 +29,9 @@ from utils.torch_utils import load_classifier, select_device, time_sync
 from utils.metrics import predicts_to_multilabel_numpy
 
 
+def detection_metrics(predicts,targets):
+    pass
+
 @torch.no_grad()
 def run(weights='yolov5s.pt',  # model.pt path(s)
         source='data/images',  # file/dir/URL/glob, 0 for webcam
@@ -167,8 +170,6 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
             pred = torch.tensor(pred)
         # NMS
         pred = non_max_suppression(pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det)[0]
-        print('\npreds')
-        print(pred)
         pred = pred.detach().cpu().numpy()
         if pred.shape[0]>1:
             pred = predicts_to_multilabel_numpy(pred,iou_thres_post,conf_thres)
