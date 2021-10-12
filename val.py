@@ -149,7 +149,7 @@ def run(data,
         dataloader = create_dataloader(data[task], imgsz, batch_size, gs, single_cls, pad=0, rect=True,
                                        prefix=colorstr(f'{task}: '))[0]
     iou_thres = 0.5
-    conf_list = np.linspace(0.1,0.9,17)
+    conf_list = np.linspace(0.1,0.6,11)
     for conf in conf_list:
         dt = [0.0, 0.0, 0.0]
         loss = torch.zeros(3, device=device)
