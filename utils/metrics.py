@@ -117,7 +117,7 @@ def get_metrics(out,targets,metrics,iou_th,conf_th):
         for pred in predicts:
             if pred[-2]>=conf_th:
                 filtered_predicts.append(pred)
-        temp_predicts = np.array(filtered_predicts)
+        temp_predicts = np.array(filtered_predicts).astype(int)
         temp_targets = targets[(targets[...,0]==index).nonzero()[0]].astype(int)
         if len(temp_predicts)==0:
             all_target_labels = []
@@ -131,7 +131,6 @@ def get_metrics(out,targets,metrics,iou_th,conf_th):
         else:
             if len(temp_predicts.shape)<2:
                 temp_predicts = torch.unsqueeze(temp_predicts, 0)
-            temp_predicts =  temp_predicts.detach().cpu().numpy().astype(int)
             metrics = get_metrics_per_class(temp_predicts,temp_targets,iou_th,metrics)
     return metrics
 

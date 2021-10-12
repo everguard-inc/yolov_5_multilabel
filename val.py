@@ -83,7 +83,7 @@ def process_batch(detections, labels, iouv):
 @torch.no_grad()
 def run(data,
         weights=None,  # model.pt path(s)
-        batch_size=32,  # batch size
+        batch_size=12,  # batch size
         imgsz=640,  # inference size (pixels)
         conf_thres=0.5,  # confidence threshold
         iou_thres=0.5,  # NMS IoU threshold
@@ -159,6 +159,8 @@ def run(data,
         for _ in range(nc):
             metrics_05.append(deepcopy(metrics_dict))
         f1_05 = [0 for i in range(nc)]
+        print()
+        print('conf = ',conf)
         for batch_i, (img, targets, paths, shapes) in enumerate(tqdm(dataloader)):
             t1 = time_sync()
             img = img.to(device, non_blocking=True)
@@ -188,8 +190,6 @@ def run(data,
             pr_05 = metrics_05[i]['tp'] / (metrics_05[i]['tp']+metrics_05[i]['fp'] + 1e-9)
             recall_05 = metrics_05[i]['tp'] / (metrics_05[i]['tp']+metrics_05[i]['fn'] + 1e-9)
             f1_05[i] = round(2 * pr_05 * recall_05/(pr_05 + recall_05 + 1e-9),2)
-        print()
-        print('conf = ',conf)
         print('f1_05 = ',f1_05)
         print()
     return f1_05, (loss.cpu() / len(dataloader)).tolist()
