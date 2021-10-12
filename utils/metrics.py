@@ -112,9 +112,13 @@ def get_metrics_per_class(predicts,targets,iou_th,metrics):
 
 def get_metrics(out,targets,metrics,iou_th,conf_th):
     for index, predicts in enumerate(out):
-        predicts_index = (predicts[...,-2]>=conf_th).nonzero().squeeze()
+        predicts = predicts.detach().cpu().numpy()
+        filtered_predicts = []
+        for pred in predicts:
+            if pred[-2]>=conf_th:
+                filtered_predicts.append(pred)
+        temp_predicts = np.array(filtered_predicts)
         temp_targets = targets[(targets[...,0]==index).nonzero()[0]].astype(int)
-        temp_predicts = predicts[predicts_index]
         if len(temp_predicts)==0:
             all_target_labels = []
             for target in temp_targets:

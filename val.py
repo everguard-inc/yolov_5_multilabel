@@ -86,7 +86,7 @@ def run(data,
         batch_size=32,  # batch size
         imgsz=640,  # inference size (pixels)
         conf_thres=0.5,  # confidence threshold
-        iou_thres=0.9,  # NMS IoU threshold
+        iou_thres=0.5,  # NMS IoU threshold
         task='val',  # train, val, test, speed or study
         device='',  # cuda device, i.e. 0 or 0,1,2,3 or cpu
         single_cls=False,  # treat as single-class dataset
@@ -148,55 +148,51 @@ def run(data,
         task = task if task in ('train', 'val', 'test') else 'val'  # path to train/val/test images
         dataloader = create_dataloader(data[task], imgsz, batch_size, gs, single_cls, pad=0, rect=True,
                                        prefix=colorstr(f'{task}: '))[0]
+    iou_thres = 0.5
+    conf_list = np.linspace(0.1,0.9,17)
+    for conf in conf_list:
+        dt = [0.0, 0.0, 0.0]
+        loss = torch.zeros(3, device=device)
+        nc = 9
+        metrics_dict = {'tp':0,'tn':0,'fp':0,'fn':0}
+        metrics_05 = []
+        for _ in range(nc):
+            metrics_05.append(deepcopy(metrics_dict))
+        f1_05 = [0 for i in range(nc)]
+        for batch_i, (img, targets, paths, shapes) in enumerate(tqdm(dataloader)):
+            t1 = time_sync()
+            img = img.to(device, non_blocking=True)
+            img = img.half() if half else img.float()  # uint8 to fp16/32
+            img /= 255.0  # 0 - 255 to 0.0 - 1.0
+            targets = targets.to(device)
+            nb, _, height, width = img.shape  # batch size, channels, height, width
+            t2 = time_sync()
+            dt[0] += t2 - t1
+            # Run model
+            out, train_out = model(img, augment=augment)  # inference and training outputs
+            dt[1] += time_sync() - t2
+            # Compute loss
+            if compute_loss:
+                loss += compute_loss([x.float() for x in train_out], targets)[1]  # box, obj, cls
 
-    dt = [0.0, 0.0, 0.0]
-    loss = torch.zeros(3, device=device)
-    nc = 9
-    metrics_dict = {'tp':0,'tn':0,'fp':0,'fn':0}
-    metrics_05 = []
-    metrics_09 = []
-    for _ in range(nc):
-        metrics_05.append(deepcopy(metrics_dict))
-        metrics_09.append(deepcopy(metrics_dict))
-    f1_05, f1_09 = [0 for i in range(nc)], [0 for i in range(nc)]
-    for batch_i, (img, targets, paths, shapes) in enumerate(tqdm(dataloader)):
-        t1 = time_sync()
-        img = img.to(device, non_blocking=True)
-        img = img.half() if half else img.float()  # uint8 to fp16/32
-        img /= 255.0  # 0 - 255 to 0.0 - 1.0
-        targets = targets.to(device)
-        nb, _, height, width = img.shape  # batch size, channels, height, width
-        t2 = time_sync()
-        dt[0] += t2 - t1
-        # Run model
-        out, train_out = model(img, augment=augment)  # inference and training outputs
-        dt[1] += time_sync() - t2
-        # Compute loss
-        if compute_loss:
-            loss += compute_loss([x.float() for x in train_out], targets)[1]  # box, obj, cls
-
-        # Run NMS
-        targets[:, -4:] *= torch.Tensor([width, height, width, height]).to(device)  # to pixels
-        lb = [targets[targets[:, 0] == i, 1:] for i in range(nb)] if save_hybrid else []  # for autolabelling
-        targets[:,-4:] = xywh2xyxy(targets[:,-4:])
-        t3 = time_sync()
-        out = non_max_suppression(out, conf_thres, iou_thres, labels=lb, multi_label=True, agnostic=single_cls)
-        targets = targets.detach().cpu().numpy()
-        #img = img.detach().cpu().numpy()
-        metrics_05 = get_metrics(out,targets,metrics_05,0.5,0.5)
-        metrics_09 = get_metrics(out,targets,metrics_09,0.9,0.5)
-    for i in range(nc):
-        pr_05 = metrics_05[i]['tp'] / (metrics_05[i]['tp']+metrics_05[i]['fp'] + 1e-9)
-        recall_05 = metrics_05[i]['tp'] / (metrics_05[i]['tp']+metrics_05[i]['fn'] + 1e-9)
-        pr_09 = metrics_09[i]['tp'] / (metrics_09[i]['tp']+metrics_09[i]['fp'] + 1e-9)
-        recall_09 = metrics_09[i]['tp'] / (metrics_09[i]['tp']+metrics_09[i]['fn'] + 1e-9)
-        f1_05[i] = round(2 * pr_05 * recall_05/(pr_05 + recall_05 + 1e-9),2)
-        f1_09[i] = round(2 * pr_09 * recall_09/(pr_09+recall_09 + 1e-9),2)
-
-    print('f1_05 = ',f1_05)
-    print('f1_09 = ',f1_09)
-    print()
-    return f1_05, f1_09, (loss.cpu() / len(dataloader)).tolist()
+            # Run NMS
+            targets[:, -4:] *= torch.Tensor([width, height, width, height]).to(device)  # to pixels
+            lb = [targets[targets[:, 0] == i, 1:] for i in range(nb)] if save_hybrid else []  # for autolabelling
+            targets[:,-4:] = xywh2xyxy(targets[:,-4:])
+            t3 = time_sync()
+            out = non_max_suppression(out, conf, iou_thres, labels=lb, multi_label=True, agnostic=single_cls)
+            targets = targets.detach().cpu().numpy()
+            #img = img.detach().cpu().numpy()
+            metrics_05 = get_metrics(out,targets,metrics_05,iou_thres,conf)
+        for i in range(nc):
+            pr_05 = metrics_05[i]['tp'] / (metrics_05[i]['tp']+metrics_05[i]['fp'] + 1e-9)
+            recall_05 = metrics_05[i]['tp'] / (metrics_05[i]['tp']+metrics_05[i]['fn'] + 1e-9)
+            f1_05[i] = round(2 * pr_05 * recall_05/(pr_05 + recall_05 + 1e-9),2)
+        print()
+        print('conf = ',conf)
+        print('f1_05 = ',f1_05)
+        print()
+    return f1_05, (loss.cpu() / len(dataloader)).tolist()
 
 
 def parse_opt():
