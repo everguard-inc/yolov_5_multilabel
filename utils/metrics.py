@@ -110,11 +110,12 @@ def get_metrics_per_class(predicts,targets,iou_th,metrics):
                 metrics[predicted_label]['fn']+=1
     return metrics
 
-def get_metrics(out,targets,metrics,iou_th,conf_th):
+def get_metrics(out,targets,metrics,iou_th,conf_th_list):
     for index, predicts in enumerate(out):
         predicts = predicts.detach().cpu().numpy()
         filtered_predicts = []
         for pred in predicts:
+            conf_th = conf_th_list[int(pred[-1])]
             if pred[-2]>=conf_th:
                 filtered_predicts.append(pred)
         temp_predicts = np.array(filtered_predicts).astype(int)
