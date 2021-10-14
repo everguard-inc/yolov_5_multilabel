@@ -140,7 +140,7 @@ def run(data,
         task = task if task in ('train', 'val', 'test') else 'val'  # path to train/val/test images
         dataloader = create_dataloader(data[task], imgsz, batch_size, gs, single_cls, pad=0, rect=True,
                                        prefix=colorstr(f'{task}: '))[0]
-    conf_list_th = [0.55, 0.5, 0.25, 0.5, 0.4, 0.25, 0.55, 0.5, 0.25]
+    conf_list_th = [0.4, 0.4, 0.25, 0.4, 0.4, 0.25, 0.4, 0.4, 0.25]
     dt = [0.0, 0.0, 0.0]
     loss = torch.zeros(3, device=device)
     nc = 9
