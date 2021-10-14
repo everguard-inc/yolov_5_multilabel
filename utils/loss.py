@@ -74,7 +74,7 @@ class ComputeLoss:
         self.cp, self.cn = smooth_BCE(eps=h.get('label_smoothing', 0.0))  # positive, negative BCE targets
 
         # Focal loss
-        BCEcls, BCEobj = FocalLoss(BCEcls), FocalLoss(BCEobj)
+        #BCEcls, BCEobj = FocalLoss(BCEcls), FocalLoss(BCEobj)
         det = model.module.model[-1] if is_parallel(model) else model.model[-1]  # Detect() module
         self.balance = {3: [4.0, 1.0, 0.4]}.get(det.nl, [4.0, 1.0, 0.25, 0.06, .02])  # P3-P7
         self.ssi = list(det.stride).index(16) if autobalance else 0  # stride 16 index
