@@ -362,7 +362,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                                            compute_loss=compute_loss)
             print(f'\nf1_05 = {f1_05}, loss = {loss}\n')
             fi = np.array(f1_05).mean()
-            if fi > best_fitness:
+            if fi >= best_fitness:
                 best_fitness = fi
 
             # Save model
