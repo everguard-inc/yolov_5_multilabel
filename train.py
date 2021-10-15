@@ -512,8 +512,8 @@ def main(opt, callbacks=Callbacks()):
     # Evolve hyperparameters (optional)
     else:
         # Hyperparameter evolution metadata (mutation scale 0-1, lower_limit, upper_limit)
-        meta = {'lr0': (1, 1e-5, 1e-1),  # initial learning rate (SGD=1E-2, Adam=1E-3)
-                'lrf': (1, 0.01, 1.0),  # final OneCycleLR learning rate (lr0 * lrf)
+        meta = {'lr0': (1, 1e-3, 1e-3),  # initial learning rate (SGD=1E-2, Adam=1E-3)
+                'lrf': (1, 0.2, 0.5),  # final OneCycleLR learning rate (lr0 * lrf)
                 'momentum': (0.3, 0.6, 0.98),  # SGD momentum/Adam beta1
                 'weight_decay': (1, 0.0, 0.001),  # optimizer weight decay
                 'warmup_epochs': (1, 0.0, 5.0),  # warmup epochs (fractions ok)

@@ -36,7 +36,7 @@ def detection_metrics(predicts,targets):
 def run(weights='yolov5s.pt',  # model.pt path(s)
         source='data/images',  # file/dir/URL/glob, 0 for webcam
         imgsz=736,  # inference size (pixels)
-        conf_thres=0.5,  # confidence threshold
+        conf_thres=0.25,  # confidence threshold
         iou_thres=0.5,  # NMS IOU threshold
         iou_thres_post = 0.8,
         max_det=100,  # maximum detections per image
@@ -171,6 +171,8 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
         # NMS
         pred = non_max_suppression(pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det)[0]
         pred = pred.detach().cpu().numpy()
+        print()
+        print(pred)
         if pred.shape[0]>1:
             pred = predicts_to_multilabel_numpy(pred,iou_thres_post,conf_thres)
         else:
