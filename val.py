@@ -176,7 +176,7 @@ def run(data,
     for i in range(nc):
         pr_05 = metrics_05[i]['tp'] / (metrics_05[i]['tp']+metrics_05[i]['fp'] + 1e-9)
         recall_05 = metrics_05[i]['tp'] / (metrics_05[i]['tp']+metrics_05[i]['fn'] + 1e-9)
-        f1_05[i] = round(2 * pr_05 * recall_05/(pr_05 + recall_05 + 1e-9),2)
+        f1_05[i] = 2 * pr_05 * recall_05/(pr_05 + recall_05 + 1e-9)
 
     return f1_05, (loss.cpu() / len(dataloader)).tolist()
 
