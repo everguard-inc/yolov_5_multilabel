@@ -400,7 +400,7 @@ def merge_equal_objects(labels,num_classes):
 class LoadImagesAndLabels(Dataset):  # for training/testing
     cache_version = 0.5  # dataset labels *.cache version
 
-    def __init__(self, path, img_size=(1280,736), batch_size=1, augment=False, hyp=None, rect=False, image_weights=False,
+    def __init__(self, path, img_size=(1280,736), batch_size=1, augment=True, hyp=None, rect=True, image_weights=False,
                  cache_images=False, single_cls=False, stride=32, pad=0.0, prefix=''):
         self.img_size = img_size
         self.augment = augment
