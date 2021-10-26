@@ -114,7 +114,7 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
             int8 = input_details[0]['dtype'] == np.uint8  # is TFLite quantized uint8 model
     imgsz = check_img_size(imgsz, s=stride)  # check image size
     ascii = is_ascii(names)  # names are ascii (use PIL for UTF-8)
-    conf_list_th = [0.5, 0.5, 0.2, 0.5, 0.5, 0.2, 0.5, 0.2, 0.2]
+
     # Dataloader
     if webcam:
         view_img = check_imshow()
@@ -171,12 +171,12 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
         # NMS
         pred = non_max_suppression(pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det)[0]
         pred = pred.detach().cpu().numpy()
-        if pred.shape[0]>1:
-            pred = predicts_to_multilabel_numpy(pred,iou_thres_post,conf_list_th)
-        else:
-            pred = np.expand_dims(pred, 0)
         print()
         print(pred)
+        if pred.shape[0]>1:
+            pred = predicts_to_multilabel_numpy(pred,iou_thres_post,conf_thres)
+        else:
+            pred = np.expand_dims(pred, 0)
         # Second-stage classifier (optional)
         if classify:
             pred = apply_classifier(pred, modelc, img, im0s)
@@ -192,7 +192,6 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
         gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
         imc = im0.copy() if save_crop else im0  # for save_crop
         annotator = Annotator(im0, line_width=line_thickness, pil=not ascii)
-        class_names = ['in_harness', 'not_in_harness', 'harness_unrecognized', 'in_vest', 'not_in_vest','vest_unrecognized','in_hardhat','not_in_hardhat','hardhat_unrecognized']
         # Process predictions
         for i, det in enumerate(pred):  # per image
             if len(det):
@@ -200,10 +199,10 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
                 s = ''
                 det[:4] = scale_coords(img.shape[2:], det[:4], im0.shape).round()
                 print()
-                labels = set(list(det[0,4:].astype(int)))
+                labels = det[0,4:].astype(int)
                 # Print results
                 for c in labels:
-                    s += f"{class_names[c]}, "  # add to string
+                    s += f"{c};"  # add to string
                 # Write results
                 for *xyxy, conf, cls in reversed(det):
                     if save_txt:  # Write to file
@@ -273,7 +272,7 @@ def parse_opt():
     parser.add_argument('--visualize', action='store_true', help='visualize features')
     parser.add_argument('--update', action='store_true', help='update all models')
     parser.add_argument('--project', default='runs/detect', help='save results to project/name')
-    parser.add_argument('--name', default='split1', help='save results to project/name')
+    parser.add_argument('--name', default='exp', help='save results to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     parser.add_argument('--line-thickness', default=3, type=int, help='bounding box thickness (pixels)')
     parser.add_argument('--hide-labels', default=False, action='store_true', help='hide labels')

@@ -7,7 +7,6 @@ from threading import Thread
 from copy import deepcopy
 import numpy as np
 import torch
-#from torch._C import uint8
 #from torch._C import float16
 from tqdm import tqdm
 
@@ -25,7 +24,7 @@ from utils.metrics import ap_per_class, ConfusionMatrix
 from utils.plots import output_to_target, plot_images, plot_val_study
 from utils.torch_utils import select_device, time_sync
 from utils.callbacks import Callbacks
-from utils.metrics import get_metrics,get_metrics_by_size
+from utils.metrics import get_metrics
 
 def save_one_txt(predn, save_conf, shape, file):
     # Save one txt result
@@ -78,8 +77,8 @@ def run(data,
         weights=None,  # model.pt path(s)
         batch_size=32,  # batch size
         imgsz=640,  # inference size (pixels)
-        conf_thres=0.5,  # confidence threshold
-        iou_thres=0.9,  # NMS IoU threshold
+        conf_thres=0.4,  # confidence threshold
+        iou_thres=0.4,  # NMS IoU threshold
         task='val',  # train, val, test, speed or study
         device='',  # cuda device, i.e. 0 or 0,1,2,3 or cpu
         single_cls=False,  # treat as single-class dataset
@@ -101,7 +100,6 @@ def run(data,
         compute_loss=None,
         ):
     # Initialize/load model and set device
-    batch_size = 1
     training = model is not None
     if training:  # called by train.py
         device = next(model.parameters()).device  # get model device
@@ -142,10 +140,10 @@ def run(data,
         task = task if task in ('train', 'val', 'test') else 'val'  # path to train/val/test images
         dataloader = create_dataloader(data[task], imgsz, batch_size, gs, single_cls, pad=0, rect=True,
                                        prefix=colorstr(f'{task}: '))[0]
-    conf_list_th = [0.5, 0.5, 0.2, 0.5, 0.3, 0.5, 0.5, 0.5, 0.2]
+    conf_list_th = [0.4, 0.4, 0.2, 0.4, 0.4, 0.2, 0.4, 0.2, 0.2, 0.4,0.4,0.4]
     dt = [0.0, 0.0, 0.0]
     loss = torch.zeros(3, device=device)
-    nc = 9
+    nc = 12
     metrics_dict = {'tp':0,'tn':0,'fp':0,'fn':0}
     metrics_05 = []
     for _ in range(nc):
@@ -166,6 +164,7 @@ def run(data,
         # Compute loss
         if compute_loss:
             loss += compute_loss([x.float() for x in train_out], targets)[1]  # box, obj, cls
+
         # Run NMS
         targets[:, -4:] *= torch.Tensor([width, height, width, height]).to(device)  # to pixels
         lb = [targets[targets[:, 0] == i, 1:] for i in range(nb)] if save_hybrid else []  # for autolabelling
@@ -174,7 +173,6 @@ def run(data,
         out = non_max_suppression(out, conf_thres, iou_thres, labels=lb, multi_label=True, agnostic=single_cls)
         targets = targets.detach().cpu().numpy()
         metrics_05 = get_metrics(out,targets,metrics_05,0.5,conf_list_th)
-
     for i in range(nc):
         pr_05 = metrics_05[i]['tp'] / (metrics_05[i]['tp']+metrics_05[i]['fp'] + 1e-9)
         recall_05 = metrics_05[i]['tp'] / (metrics_05[i]['tp']+metrics_05[i]['fn'] + 1e-9)

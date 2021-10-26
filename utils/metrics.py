@@ -34,15 +34,8 @@ def iou_batch_numpy(bb_test, bb_gt):
               + (bb_gt[..., 2] - bb_gt[..., 0]) * (bb_gt[..., 3] - bb_gt[..., 1]) - wh)
     return iou_matrix
 
-def predicts_to_multilabel_numpy(predicts : np.ndarray, iou_th : float, conf_th_list : float) -> torch.tensor:
-    filtered_predicts = []
-    for pred in predicts:
-        conf_th = conf_th_list[int(pred[-1])]
-        if pred[-2]>=conf_th:
-            filtered_predicts.append(pred)
-    predicts = np.array(filtered_predicts)
-    if len(predicts)==0:
-        return []
+def predicts_to_multilabel_numpy(predicts : np.ndarray, iou_th : float, conf_th : float) -> torch.tensor:
+    predicts = predicts[(predicts[...,4]>=conf_th).nonzero()[0]]
     iou_matrix = iou_batch_numpy(predicts,predicts)
     iou_matrix = np.triu(iou_matrix,1)
     matched_indices = np.c_[(iou_matrix>iou_th).nonzero()]
@@ -92,61 +85,6 @@ def bbox_iou_numpy(bb1, bb2):
     assert iou <= 1.0
     return iou
 
-
-def get_metrics_per_class_by_size(predicts,targets,iou_th,metrics,size):
-    for predict in predicts:
-        predicted_label = int(predict[-1])
-        predicted_box = predict[:4]
-        predicted_height = abs(predicted_box[-1]-predicted_box[-3])
-        if predicted_height in range(size[0],size[1]):
-            if len(targets) == 0:
-                metrics[predicted_label]['fp']+=1
-            else:
-                iou_all = np.array([bbox_iou_numpy(target[-4:],predicted_box) for target in targets])
-                if (iou_all >= iou_th).any():
-                    matched_targets_index = np.where(iou_all>=iou_th)[0]
-                    matched_targets = targets[matched_targets_index]
-                    all_matched_labels = []
-                    for target in matched_targets:
-                        target_labels = decode_labels(target[1:-4])
-                        for label in target_labels:
-                            all_matched_labels.append(label)
-                    if predicted_label in all_matched_labels:
-                        metrics[predicted_label]['tp']+=1
-                    else:
-                        metrics[predicted_label]['fn']+=1
-                        metrics[predicted_label]['fp']+=1
-                else:
-                    metrics[predicted_label]['fn']+=1
-        else:
-            continue
-    return metrics
-
-def get_metrics_by_size(out,targets,metrics,iou_th,conf_th_list, size = (550, 600)):
-    for index, predicts in enumerate(out):
-        predicts = predicts.detach().cpu().numpy()
-        filtered_predicts = []
-        for pred in predicts:
-            conf_th = conf_th_list[int(pred[-1])]
-            if pred[-2]>=conf_th:
-                filtered_predicts.append(pred)
-        temp_predicts = np.array(filtered_predicts).astype(int)
-        temp_targets = targets[(targets[...,0]==index).nonzero()[0]].astype(int)
-        if len(temp_predicts)==0:
-            all_target_labels = []
-            for target in temp_targets:
-                    target_labels = decode_labels(target[1:-4])
-                    target_height = abs(target[-1]-target[-3])
-                    if target_height in range(size[0],size[1]):
-                        for label in target_labels:
-                            all_target_labels.append(label)
-            for label in all_target_labels:
-                metrics[label]['fn']+=1
-        else:
-            metrics = get_metrics_per_class_by_size(temp_predicts,temp_targets,iou_th,metrics,size)
-    return metrics
-
-
 def get_metrics_per_class(predicts,targets,iou_th,metrics):
     for predict in predicts:
         predicted_label = int(predict[-1])
@@ -186,10 +124,9 @@ def get_metrics(out,targets,metrics,iou_th,conf_th_list):
             all_target_labels = []
             for target in temp_targets:
                     target_labels = decode_labels(target[1:-4])
-                    box = target[-4:]
-                    box = np.ascontiguousarray(box)
                     for label in target_labels:
                         all_target_labels.append(label)
+            all_target_labels = list(set(all_target_labels))    
             for label in all_target_labels:
                 metrics[label]['fn']+=1
         else:

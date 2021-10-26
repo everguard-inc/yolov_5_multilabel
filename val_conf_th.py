@@ -133,11 +133,10 @@ def run(data,
         data = check_dataset(data)  # check
 
     # Half
-    half = True
-    print('\nhalf = ',half)
     half &= device.type != 'cpu'  # half precision only supported on CUDA
     if half:
         model.half()
+
     # Configure
     model.eval()
     is_coco = isinstance(data.get('val'), str) and data['val'].endswith('coco/val2017.txt')  # COCO dataset
@@ -150,8 +149,7 @@ def run(data,
         dataloader = create_dataloader(data[task], imgsz, batch_size, gs, single_cls, pad=0, rect=True,
                                        prefix=colorstr(f'{task}: '))[0]
     iou_thres = 0.5
-    conf_list = np.linspace(0.2,0.7,6)
-    all_metrics = []
+    conf_list = np.linspace(0.1,0.6,11)
     for conf in conf_list:
         dt = [0.0, 0.0, 0.0]
         loss = torch.zeros(3, device=device)
@@ -191,16 +189,9 @@ def run(data,
         for i in range(nc):
             pr_05 = metrics_05[i]['tp'] / (metrics_05[i]['tp']+metrics_05[i]['fp'] + 1e-9)
             recall_05 = metrics_05[i]['tp'] / (metrics_05[i]['tp']+metrics_05[i]['fn'] + 1e-9)
-            f1_05[i] = round(2 * pr_05 * recall_05/(pr_05 + recall_05 + 1e-9),3)
+            f1_05[i] = round(2 * pr_05 * recall_05/(pr_05 + recall_05 + 1e-9),2)
         print('f1_05 = ',f1_05)
-        all_metrics.append(f1_05)
         print()
-    all_metrics = np.array(all_metrics)
-    if not os.path.exists(f'dataset_ppe/results_split1/sgd/{data["train"].split("/")[-3]}'):
-        new_path = f'dataset_ppe/results_split1/sgd/{data["train"].split("/")[-3]}'
-        os.mkdir(new_path)
-        with open(os.path.join(new_path,'all_metrics.npy'), 'wb') as f:
-            np.save(f, all_metrics)
     return f1_05, (loss.cpu() / len(dataloader)).tolist()
 
 
@@ -228,7 +219,8 @@ def parse_opt():
     opt = parser.parse_args()
     opt.save_json |= opt.data.endswith('coco.yaml')
     opt.save_txt |= opt.save_hybrid
-
+    opt.data = check_yaml(opt.data)  # check YAML
+    print_args(FILE.stem, opt)
     return opt
 
 
@@ -236,36 +228,28 @@ def main(opt):
     set_logging()
     check_requirements(exclude=('tensorboard', 'thop'))
 
-    valid_folders = os.listdir('dataset_ppe/validations')
-    for folder in valid_folders:
-        data_path = os.path.join('dataset_ppe/validations',folder,'data.yaml')
-        opt.data = data_path
-        opt.data = check_yaml(opt.data)  # check YAML
-        print_args(FILE.stem, opt)
-        print("\nFolder = ",folder)
-        print()
-        if opt.task in ('train', 'val', 'test'):  # run normally
-            run(**vars(opt))
+    if opt.task in ('train', 'val', 'test'):  # run normally
+        run(**vars(opt))
 
-        elif opt.task == 'speed':  # speed benchmarks
-            for w in opt.weights if isinstance(opt.weights, list) else [opt.weights]:
-                run(opt.data, weights=w, batch_size=opt.batch_size, imgsz=opt.imgsz, conf_thres=.25, iou_thres=.45,
-                    save_json=False, plots=False)
+    elif opt.task == 'speed':  # speed benchmarks
+        for w in opt.weights if isinstance(opt.weights, list) else [opt.weights]:
+            run(opt.data, weights=w, batch_size=opt.batch_size, imgsz=opt.imgsz, conf_thres=.25, iou_thres=.45,
+                save_json=False, plots=False)
 
-        elif opt.task == 'study':  # run over a range of settings and save/plot
-            # python val.py --task study --data coco.yaml --iou 0.7 --weights yolov5s.pt yolov5m.pt yolov5l.pt yolov5x.pt
-            x = list(range(256, 1536 + 128, 128))  # x axis (image sizes)
-            for w in opt.weights if isinstance(opt.weights, list) else [opt.weights]:
-                f = f'study_{Path(opt.data).stem}_{Path(w).stem}.txt'  # filename to save to
-                y = []  # y axis
-                for i in x:  # img-size
-                    print(f'\nRunning {f} point {i}...')
-                    r, _, t = run(opt.data, weights=w, batch_size=opt.batch_size, imgsz=i, conf_thres=opt.conf_thres,
-                                iou_thres=opt.iou_thres, save_json=opt.save_json, plots=False)
-                    y.append(r + t)  # results and times
-                np.savetxt(f, y, fmt='%10.4g')  # save
-            os.system('zip -r study.zip study_*.txt')
-            plot_val_study(x=x)  # plot
+    elif opt.task == 'study':  # run over a range of settings and save/plot
+        # python val.py --task study --data coco.yaml --iou 0.7 --weights yolov5s.pt yolov5m.pt yolov5l.pt yolov5x.pt
+        x = list(range(256, 1536 + 128, 128))  # x axis (image sizes)
+        for w in opt.weights if isinstance(opt.weights, list) else [opt.weights]:
+            f = f'study_{Path(opt.data).stem}_{Path(w).stem}.txt'  # filename to save to
+            y = []  # y axis
+            for i in x:  # img-size
+                print(f'\nRunning {f} point {i}...')
+                r, _, t = run(opt.data, weights=w, batch_size=opt.batch_size, imgsz=i, conf_thres=opt.conf_thres,
+                              iou_thres=opt.iou_thres, save_json=opt.save_json, plots=False)
+                y.append(r + t)  # results and times
+            np.savetxt(f, y, fmt='%10.4g')  # save
+        os.system('zip -r study.zip study_*.txt')
+        plot_val_study(x=x)  # plot
 
 
 if __name__ == "__main__":
