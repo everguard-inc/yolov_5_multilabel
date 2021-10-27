@@ -140,10 +140,10 @@ def run(data,
         task = task if task in ('train', 'val', 'test') else 'val'  # path to train/val/test images
         dataloader = create_dataloader(data[task], imgsz, batch_size, gs, single_cls, pad=0, rect=True,
                                        prefix=colorstr(f'{task}: '))[0]
-    conf_list_th = [0.4, 0.4, 0.2, 0.4, 0.4, 0.2, 0.4, 0.2, 0.2, 0.4,0.4,0.4]
+    conf_list_th = [0.4, 0.4, 0.2, 0.4, 0.4, 0.2, 0.4, 0.2, 0.2, 0.4]
     dt = [0.0, 0.0, 0.0]
     loss = torch.zeros(3, device=device)
-    nc = 12
+    nc = 10
     metrics_dict = {'tp':0,'tn':0,'fp':0,'fn':0}
     metrics_05 = []
     for _ in range(nc):

@@ -36,8 +36,8 @@ def detection_metrics(predicts,targets):
 def run(weights='yolov5s.pt',  # model.pt path(s)
         source='data/images',  # file/dir/URL/glob, 0 for webcam
         imgsz=736,  # inference size (pixels)
-        conf_thres=0.25,  # confidence threshold
-        iou_thres=0.5,  # NMS IOU threshold
+        conf_thres=0.01,  # confidence threshold
+        iou_thres=0.1,  # NMS IOU threshold
         iou_thres_post = 0.8,
         max_det=100,  # maximum detections per image
         device='',  # cuda device, i.e. 0 or 0,1,2,3 or cpu
@@ -170,9 +170,10 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
             pred = torch.tensor(pred)
         # NMS
         pred = non_max_suppression(pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det)[0]
+        print('predictions')
+        print(pred)
         pred = pred.detach().cpu().numpy()
         print()
-        print(pred)
         if pred.shape[0]>1:
             pred = predicts_to_multilabel_numpy(pred,iou_thres_post,conf_thres)
         else:
@@ -256,9 +257,9 @@ def parse_opt():
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', nargs='+', type=str, default='yolov5s.pt', help='model path(s)')
     parser.add_argument('--source', type=str, default='data/images', help='file/dir/URL/glob, 0 for webcam')
-    parser.add_argument('--imgsz', '--img', '--img-size', nargs='+', type=int, default=[640], help='inference size h,w')
-    parser.add_argument('--conf-thres', type=float, default=0.25, help='confidence threshold')
-    parser.add_argument('--iou-thres', type=float, default=0.45, help='NMS IoU threshold')
+    parser.add_argument('--imgsz', '--img', '--img-size', nargs='+', type=int, default=[736], help='inference size h,w')
+    parser.add_argument('--conf-thres', type=float, default=0.01, help='confidence threshold')
+    parser.add_argument('--iou-thres', type=float, default=0.3, help='NMS IoU threshold')
     parser.add_argument('--max-det', type=int, default=1000, help='maximum detections per image')
     parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--view-img', action='store_true', help='show results')

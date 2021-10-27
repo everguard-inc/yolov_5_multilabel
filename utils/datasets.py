@@ -412,7 +412,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         self.stride = stride
         self.path = path
         self.albumentations = Albumentations() if augment else None
-        self.num_classes = 12
+        self.num_classes = 10
         self.multi_label = True
 
         try:
