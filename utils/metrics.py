@@ -6,7 +6,7 @@ Model validation metrics
 import math
 import warnings
 from pathlib import Path
-
+from typing import List
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -34,32 +34,44 @@ def iou_batch_numpy(bb_test, bb_gt):
               + (bb_gt[..., 2] - bb_gt[..., 0]) * (bb_gt[..., 3] - bb_gt[..., 1]) - wh)
     return iou_matrix
 
-def predicts_to_multilabel_numpy(predicts : np.ndarray, iou_th : float, conf_th : float) -> torch.tensor:
-    predicts = predicts[(predicts[...,4]>=conf_th).nonzero()[0]]
+def predicts_to_multilabel_numpy(predicts : np.ndarray, iou_th : float, conf_th_list : List, skip_label : int = 9) -> np.ndarray:
+    filtered_predicts = []
+    for pred in predicts:
+        conf_th = conf_th_list[int(pred[-1])]
+        if pred[-2]>=conf_th:
+            filtered_predicts.append(pred)
+    predicts = np.array(filtered_predicts).astype(int)
+    extra_predicts = predicts[(predicts[...,-1]==skip_label).nonzero()[0]].astype(int)
+    predicts = predicts[(predicts[...,-1]!=skip_label).nonzero()[0]].astype(int)
     iou_matrix = iou_batch_numpy(predicts,predicts)
-    iou_matrix = np.triu(iou_matrix,1)
+    iou_matrix = np.triu(iou_matrix,0)
     matched_indices = np.c_[(iou_matrix>iou_th).nonzero()]
     new_matched_indices = []
-    unique = np.array([])
-    for ids in range(len(matched_indices)):
-        if len(unique)==0:
-            unique = np.concatenate((unique,matched_indices[ids]),0)
+    for ids in range(len(matched_indices)-1):
+        if len(new_matched_indices)==0:
+            new_matched_indices.append(list(set(matched_indices[ids])))
         else:
-            if matched_indices[ids][0] in unique or matched_indices[ids][1] in unique:
-                unique = np.concatenate((unique,matched_indices[ids]),0)
-            else:
-                new_matched_indices.append(np.unique(unique).astype(int))
-                unique = np.array([])
-                unique = np.concatenate((unique,matched_indices[ids]),0)
-        if ids==len(matched_indices)-1:
-            new_matched_indices.append(np.unique(unique).astype(int))
+            exist_flag = False
+            for exist_index, exist_el in enumerate(new_matched_indices):
+                if matched_indices[ids][0] in exist_el or matched_indices[ids][1] in exist_el:
+                    new_unique = list(set(exist_el+list(matched_indices[ids])))
+                    new_matched_indices[exist_index] = new_unique
+                    exist_flag = True
+                    break  
+            if not exist_flag:
+                new_matched_indices.append(list(set(matched_indices[ids])))
     new_predicts = []
     for ids in new_matched_indices:
         new_pr = predicts[ids]
         new_pr = np.concatenate((new_pr[0][:4],new_pr[:,5]))
-        new_predicts.append(np.expand_dims(new_pr, 0))
+        new_predicts.append(new_pr)
+    for pred in extra_predicts:
+        temp = []
+        for i,el in enumerate(pred):
+            if i!=4:
+                temp.append(el)
+        new_predicts.append(np.array(temp))
     return new_predicts
-
 
 def bbox_iou_numpy(bb1, bb2):
     assert bb1[0] < bb1[2]
