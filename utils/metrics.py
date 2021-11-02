@@ -35,12 +35,17 @@ def iou_batch_numpy(bb_test, bb_gt):
     return iou_matrix
 
 def predicts_to_multilabel_numpy(predicts : np.ndarray, iou_th : float, conf_th_list : List, skip_label : int = 9) -> np.ndarray:
+    if len(predicts) == 0:
+        return [[]]
     filtered_predicts = []
     for pred in predicts:
         conf_th = conf_th_list[int(pred[-1])]
         if pred[-2]>=conf_th:
             filtered_predicts.append(pred)
+   
     predicts = np.array(filtered_predicts).astype(int)
+    if len(predicts) == 0:
+        return [[]]
     extra_predicts = predicts[(predicts[...,-1]==skip_label).nonzero()[0]].astype(int)
     predicts = predicts[(predicts[...,-1]!=skip_label).nonzero()[0]].astype(int)
     iou_matrix = iou_batch_numpy(predicts,predicts)
@@ -64,7 +69,7 @@ def predicts_to_multilabel_numpy(predicts : np.ndarray, iou_th : float, conf_th_
     for ids in new_matched_indices:
         new_pr = predicts[ids]
         new_pr = np.concatenate((new_pr[0][:4],new_pr[:,5]))
-        new_predicts.append(new_pr)
+        new_predicts.append(np.expand_dims(new_pr,0))
     for pred in extra_predicts:
         temp = []
         for i,el in enumerate(pred):
@@ -127,8 +132,8 @@ def get_metrics(out,targets,metrics,iou_th,conf_th_list):
         predicts = predicts.detach().cpu().numpy()
         filtered_predicts = []
         for pred in predicts:
-            conf_th = conf_th_list[int(pred[-1])]
-            if pred[-2]>=conf_th:
+            #conf_th = conf_th_list[int(pred[-1])]
+            if pred[-2]>=conf_th_list:
                 filtered_predicts.append(pred)
         temp_predicts = np.array(filtered_predicts).astype(int)
         temp_targets = targets[(targets[...,0]==index).nonzero()[0]].astype(int)

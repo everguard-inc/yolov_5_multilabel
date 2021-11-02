@@ -98,6 +98,25 @@ class Annotator:
                 cv2.putText(self.im, label, (c1[0], c1[1] - 2), 0, self.lw / 3, txt_color, thickness=tf,
                             lineType=cv2.LINE_AA)
 
+    def box_label_infraction(self, box, label, color=(128, 128, 128), txt_color=(255, 255, 255)):
+        # Add one xyxy box to image with label
+        label_names = ['in_harness', 'not_in_harness', 'harness_unrecognized', 'in_vest',\
+        'not_in_vest','vest_unrecognized','in_hardhat','not_in_hardhat','hardhat_unrecognized','bucket']
+
+        if 1:  # cv2
+            c1, c2 = (int(box[0]), int(box[1])), (int(box[2]), int(box[3]))
+            if label:
+                cv2.rectangle(self.im, c1, c2, (0,0,255), thickness=self.lw, lineType=cv2.LINE_AA)
+            else: 
+                cv2.rectangle(self.im, c1, c2, (255,0,0), thickness=self.lw, lineType=cv2.LINE_AA)
+            if label:
+                tf = max(self.lw - 1, 1)  # font thickness
+                w, h = cv2.getTextSize(label_names[label], 0, fontScale=self.lw / 3, thickness=tf)[0]
+                c2 = c1[0] + w, c1[1] - h - 3
+                cv2.rectangle(self.im, c1, c2, color, -1, cv2.LINE_AA)  # filled
+                cv2.putText(self.im, label_names[label], (c1[0], c1[1] - 2), 0, self.lw / 3, txt_color, thickness=tf,
+                            lineType=cv2.LINE_AA)
+
     def rectangle(self, xy, fill=None, outline=None, width=1):
         # Add rectangle to image (PIL-only)
         self.draw.rectangle(xy, fill, outline, width)

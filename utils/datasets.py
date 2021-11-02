@@ -209,7 +209,6 @@ class LoadImages:  # for inference
 
             self.frame += 1
             print(f'video {self.count + 1}/{self.nf} ({self.frame}/{self.frames}) {path}: ', end='')
-
         else:
             # Read image
             self.count += 1
@@ -224,7 +223,7 @@ class LoadImages:  # for inference
         img = img.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB
         img = np.ascontiguousarray(img)
 
-        return path, img, img0, self.cap
+        return path, img, img0, self.cap, self.frame
 
     def new_video(self, path):
         self.frame = 0
@@ -549,6 +548,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         hyp = self.hyp
         
         mosaic = self.mosaic and random.random() < hyp['mosaic']
+        mosaic = False
         if mosaic:
             # Load mosaic
             img, labels = load_mosaic(self, index)

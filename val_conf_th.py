@@ -108,10 +108,12 @@ def run(data,
         compute_loss=None,
         ):
     # Initialize/load model and set device
+    batch_size = 1
+    half = True
+
     training = model is not None
     if training:  # called by train.py
         device = next(model.parameters()).device  # get model device
-
     else:  # called directly
         device = select_device(device, batch_size=batch_size)
 
@@ -149,11 +151,11 @@ def run(data,
         dataloader = create_dataloader(data[task], imgsz, batch_size, gs, single_cls, pad=0, rect=True,
                                        prefix=colorstr(f'{task}: '))[0]
     iou_thres = 0.5
-    conf_list = np.linspace(0.1,0.6,11)
+    conf_list = np.linspace(0.2,0.7,6)
     for conf in conf_list:
         dt = [0.0, 0.0, 0.0]
         loss = torch.zeros(3, device=device)
-        nc = 9
+        nc = 10
         metrics_dict = {'tp':0,'tn':0,'fp':0,'fn':0}
         metrics_05 = []
         for _ in range(nc):
@@ -163,6 +165,7 @@ def run(data,
         print('conf = ',conf)
         for batch_i, (img, targets, paths, shapes) in enumerate(tqdm(dataloader)):
             t1 = time_sync()
+            print(img.shape)
             img = img.to(device, non_blocking=True)
             img = img.half() if half else img.float()  # uint8 to fp16/32
             img /= 255.0  # 0 - 255 to 0.0 - 1.0
@@ -171,7 +174,7 @@ def run(data,
             t2 = time_sync()
             dt[0] += t2 - t1
             # Run model
-            out, train_out = model(img, augment=augment)  # inference and training outputs
+            out, train_out = model(img, augment=False)  # inference and training outputs
             dt[1] += time_sync() - t2
             # Compute loss
             if compute_loss:
@@ -184,7 +187,6 @@ def run(data,
             t3 = time_sync()
             out = non_max_suppression(out, conf, iou_thres, labels=lb, multi_label=True, agnostic=single_cls)
             targets = targets.detach().cpu().numpy()
-            #img = img.detach().cpu().numpy()
             metrics_05 = get_metrics(out,targets,metrics_05,iou_thres,conf)
         for i in range(nc):
             pr_05 = metrics_05[i]['tp'] / (metrics_05[i]['tp']+metrics_05[i]['fp'] + 1e-9)
@@ -200,7 +202,7 @@ def parse_opt():
     parser.add_argument('--data', type=str, default='data/coco128.yaml', help='dataset.yaml path')
     parser.add_argument('--weights', nargs='+', type=str, default='yolov5s.pt', help='model.pt path(s)')
     parser.add_argument('--batch-size', type=int, default=32, help='batch size')
-    parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=640, help='inference size (pixels)')
+    parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=736, help='inference size (pixels)')
     parser.add_argument('--conf-thres', type=float, default=0.001, help='confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.6, help='NMS IoU threshold')
     parser.add_argument('--task', default='val', help='train, val, test, speed or study')
