@@ -8,6 +8,7 @@ Usage:
 
 import argparse
 import logging
+import cv2
 import math
 import os
 import random
@@ -38,7 +39,7 @@ from utils.autoanchor import check_anchors
 from utils.datasets import create_dataloader
 from utils.general import labels_to_class_weights, increment_path, labels_to_image_weights, init_seeds, \
     strip_optimizer, get_latest_run, check_dataset, check_git_status, check_img_size, check_requirements, \
-    check_file, check_yaml, check_suffix, print_args, print_mutation, set_logging, one_cycle, colorstr, methods
+    check_file, check_yaml, check_suffix, print_args, print_mutation, set_logging, one_cycle, colorstr, methods,xywh2xyxy
 from utils.downloads import attempt_download
 from utils.loss import ComputeLoss
 from utils.plots import plot_labels, plot_evolve
@@ -207,7 +208,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 
     # Trainloader
     train_loader, dataset = create_dataloader(train_path, imgsz, batch_size, gs, single_cls,
-                                              hyp=hyp, augment=True, cache=opt.cache, rect=False, rank=RANK,
+                                              hyp=hyp, augment=True, cache=opt.cache, rect=True, rank=RANK,
                                               workers=workers, image_weights=opt.image_weights, quad=opt.quad,
                                               prefix=colorstr('train: '))
     mlc = int(np.concatenate(dataset.labels, 0)[:, 0].max())  # max label class
@@ -217,7 +218,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     # Process 0
     if RANK in [-1, 0]:
         val_loader = create_dataloader(val_path, imgsz, batch_size, gs, single_cls,
-                                       hyp=hyp, cache=None if noval else opt.cache, rect=False, rank=-1,
+                                       hyp=hyp, cache=None if noval else opt.cache, rect=True, rank=-1,
                                        workers=workers, pad=0.5,
                                        prefix=colorstr('val: '))[0]
 
@@ -363,7 +364,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             f1_round,loss_round = [round(el,3) for el in f1_05],[round(el,7) for el in loss]
             print(f'\nf1_05 = {f1_round}, loss = {loss_round}\n')
             fi = (f1_round[0]+f1_round[1]+f1_round[3]+f1_round[4]+f1_round[6]+\
-                f1_round[7]+f1_round[9]+f1_round[10]+f1_round[11])/9
+                f1_round[7] + f1_round[9])/7
             if fi >= best_fitness:
                 best_fitness = fi
 
@@ -428,13 +429,13 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 
 def parse_opt(known=False):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--weights', type=str, default='yolov5s.pt', help='initial weights path')
+    parser.add_argument('--weights', type=str, default='yolov5m.pt', help='initial weights path')
     parser.add_argument('--cfg', type=str, default='', help='model.yaml path')
     parser.add_argument('--data', type=str, default='data/coco128.yaml', help='dataset.yaml path')
-    parser.add_argument('--hyp', type=str, default='data/hyps/hyp.scratch.yaml', help='hyperparameters path')
+    parser.add_argument('--hyp', type=str, default='data/hyps/hyp.scratch-high.yaml', help='hyperparameters path')
     parser.add_argument('--epochs', type=int, default=300)
     parser.add_argument('--batch-size', type=int, default=16, help='total batch size for all GPUs')
-    parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=640, help='train, val image size (pixels)')
+    parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=1280, help='train, val image size (pixels)')
     parser.add_argument('--rect', action='store_true', help='rectangular training')
     parser.add_argument('--resume', nargs='?', const=True, default=False, help='resume most recent training')
     parser.add_argument('--nosave', action='store_true', help='only save final checkpoint')

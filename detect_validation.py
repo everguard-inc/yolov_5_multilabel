@@ -14,6 +14,8 @@ import pandas as pd
 import cv2
 import numpy as np
 import torch
+import warnings
+warnings.filterwarnings("ignore")
 import torch.backends.cudnn as cudnn
 from copy import deepcopy
 FILE = Path(__file__).resolve()
@@ -24,12 +26,13 @@ import time
 from models.experimental import attempt_load
 from utils.datasets import LoadImages, LoadStreams
 from utils.general import apply_classifier, check_img_size, check_imshow, check_requirements, check_suffix, colorstr, \
-    increment_path, is_ascii, non_max_suppression, print_args, save_one_box, scale_coords, set_logging, \
+    increment_path, is_ascii, non_max_suppression, print_args, save_one_box, scale_coords_1d, set_logging, \
     strip_optimizer, xyxy2xywh
 from utils.plots import Annotator, colors
 from utils.torch_utils import load_classifier, select_device, time_sync
 from utils.metrics import predicts_to_multilabel_numpy
-
+from utils.kalman_tracker import KFTracker, labels_dict_to_list
+from tqdm import tqdm
 
 def detection_metrics(predicts,targets):
     pass
@@ -68,9 +71,9 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
     half = True
     
     df = pd.read_csv("events.csv")
-    df["Model Result"] = 0
+    df["result_15buffer"] = 0
 
-    # Directories
+    # Directorieso
     save_dir = increment_path(Path(project) / name, exist_ok=exist_ok)  # increment run
     (save_dir / 'labels' if save_txt else save_dir).mkdir(parents=True, exist_ok=True)  # make dir
 
@@ -136,27 +139,24 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
     # Run inference
     if pt and device.type != 'cpu':
         model(torch.zeros(1, 3, *imgsz).to(device).type_as(next(model.parameters())))  # run once
-    time_file = open("runs/detect/time.txt", "a")
-    #fp_mean_color_list = []
-    #fp_box_height_list = []
-    #fn_mean_color_list = []
-    #fn_box_height_list = []
-    #tp_mean_color_list = []
-    #tp_box_height_list = []
-    for path, img, im0s, vid_cap, frame_number in dataset:
-        print('frame_number  = ',frame_number)
+    
+    for path, img, im0s, vid_cap, frame_number in tqdm(dataset):
+        if frame_number == 1:
+            person_tracker = KFTracker(buffer_size = 15)
+
         video_name = path.split('/')[-1].split('.')[0]
         uid = path.split('/')[-1].split('_')[-1].split('.')[0]
-        event_type = df[df['Event uid']==uid]['Event Name'].iloc[0]
-        val_status = df[df['Event uid']==uid]['Validation status'].iloc[0]
-        print(uid,event_type,val_status)
+        try:
+            event_type = df[df['Event uid']==uid]['Event Name'].iloc[0]
+            #val_status = df[df['Event uid']==uid]['Validation status'].iloc[0]
+        except:
+            print(f"Event absent {video_name} {uid}")
         if event_type == "PPE - No Safety Vest":
             needed_labels = [3, 4]
         if event_type == "PPE - No Hard Hat":
             needed_labels = [6, 7]
         if event_type == "PPE - No Harness":
             needed_labels = [0, 1]
-        start = time.time()
         if onnx:
             img = img.astype('float32')
         else:
@@ -165,7 +165,6 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
         img = img / 255.0  # 0 - 255 to 0.0 - 1.0
         if len(img.shape) == 3:
             img = img[None]  # expand for batch dim
-
         # Inference
         if pt:
             visualize = increment_path(save_dir / Path(path).stem, mkdir=True) if visualize else False
@@ -193,14 +192,13 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
             pred[..., 2] *= imgsz[1]  # w
             pred[..., 3] *= imgsz[0]  # h
             pred = torch.tensor(pred)
-        # NMS
         pred = non_max_suppression(pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det)[0]
         conf_thres_list = [0.5,0.5,0.2,0.5,0.5,0.2,0.5,0.5,0.2,0.5]
         pred = pred.detach().cpu().numpy()
         if pred.shape[0]>1:
             pred = predicts_to_multilabel_numpy(pred,iou_thres_post,conf_thres_list)
         else:
-            pred = np.expand_dims(pred, 0)
+            pred = []
         # Second-stage classifier (optional)
         if classify:
             pred = apply_classifier(pred, modelc, img, im0s)
@@ -208,70 +206,28 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
             p, im0, frame = path[i], im0s[i].copy(), dataset.count
         else:
             p, im0, frame = path, im0s.copy(), getattr(dataset, 'frame', 0)
-        end = time.time()
-        time_file.write(f'{end-start}\n')
         p = Path(p)  # to Path
         save_path = str(save_dir / p.name)  # img.jpg
-        txt_path = str(save_dir / 'labels' / p.stem) + ('' if dataset.mode == 'image' else f'_{frame}')  # img.txt
-        gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
-        imc = im0.copy() if save_crop else im0  # for save_crop
         clean_image = deepcopy(im0)
-        
-        annotator = Annotator(im0, line_width=line_thickness, pil=not ascii)
-        # Process predictions
-        for i, det in enumerate(pred):  # per image
-            if len(det):
-                # Rescale boxes from img_size to im0 size
-                s = ''
-                det = det.astype(np.float64)
-                det[:4] = scale_coords(img.shape[2:], det[:4], im0.shape).round()
-                labels = det[0,4:].astype(int)
-                wrong_boxes_per_frame = list(labels).count(needed_labels[1])
-                df.loc[df['Event uid']==uid, 'Model Result'] += wrong_boxes_per_frame
-                # Print results
-                for c in labels:
-                    s += f"{c};"  # add to string
-                # Write results
-                xyxy = det[0][:4].astype(int)
-                fp = wrong_boxes_per_frame>0 and val_status=='FP'
-                fn = wrong_boxes_per_frame>=0 and val_status=='TP'
-                if fp and fn:
-                    print("\nBOTH\n")
-                infraction_box = clean_image[xyxy[1]:xyxy[3],xyxy[0]:xyxy[2]]
-                mean_color = np.mean(infraction_box)
-                box_height = abs(xyxy[3]-xyxy[2])
-                if fp:
-                    cv2.imwrite(f'color_height/fp_height/{video_name}_{str(frame_number).zfill(7)}.jpg',infraction_box)
-                    cv2.imwrite(f'color_height/fp_color/{video_name}_{str(frame_number).zfill(7)}.jpg',infraction_box)
-                    #fp_mean_color_list.append(mean_color)
-                    #fp_box_height_list.append(box_height)
-                elif fn:
-                    cv2.imwrite(f'color_height/fn_height/{video_name}_{str(frame_number).zfill(7)}.jpg',infraction_box)
-                    cv2.imwrite(f'color_height/fn_color/{video_name}_{str(frame_number).zfill(7)}.jpg',infraction_box)
-                    #fn_mean_color_list.append(mean_color)
-                    #fn_box_height_list.append(box_height)
-                else:
-                    cv2.imwrite(f'color_height/tp_height/{video_name}_{str(frame_number).zfill(7)}.jpg',infraction_box)
-                    cv2.imwrite(f'color_height/tp_color/{video_name}_{str(frame_number).zfill(7)}.jpg',infraction_box)
-                    #tp_mean_color_list.append(mean_color)
-                    #tp_box_height_list.append(box_height)
-                label = needed_labels[1] if needed_labels[1] in labels else None
-                if save_img or save_crop or view_img:  # Add bbox to image
-                        #c = int(cls)  # integer class
-                        #label = None if hide_labels else (names[c] if hide_conf else f'{names[c]} {conf:.2f}')
-                        annotator.box_label_infraction(xyxy, label)
-                        if save_crop:
-                            save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
-            
-            # Print time (inference-only)
-            # Stream results
-            im0 = annotator.result()
-            if view_img:
-                cv2.imshow(str(p), im0)
-                cv2.waitKey(1)  # 1 millisecond
 
-            # Save results (image with detections)
-            if save_img:
+        if len(pred)!=0:
+            for pred_i,_ in enumerate(pred):
+                pred[pred_i][:4] = scale_coords_1d(img.shape[2:], pred[pred_i][:4], im0.shape).round()
+                pred[pred_i][4:]= pred[pred_i][4:].astype(int)
+            labels_dict = person_tracker.update(pred)
+            labels = []
+            for d in labels_dict:
+                labels_list = labels_dict_to_list(d)
+                labels.append(labels_list)
+            labels = sum(labels, [])
+            im0 = person_tracker.visualize(im0)
+            wrong_boxes_per_frame = labels.count(needed_labels[1])
+            try:
+                df.loc[df['Event uid']==uid, 'result_15buffer'] += wrong_boxes_per_frame
+            except:
+                print("Event absent")
+        save_img = False
+        if save_img:
                 if dataset.mode == 'image':
                     cv2.imwrite(save_path, im0)
                 else:  # 'video' or 'stream'
@@ -280,51 +236,18 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
                         if isinstance(vid_writer[0], cv2.VideoWriter):
                             vid_writer[0].release()  # release previous video writer
                         if vid_cap:  # video
-                            fps = 20
+                            fps = 10
                             w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
                             h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
                         else:  # stream
-                            fps, w, h = 30, im0.shape[1], im0.shape[0]
+                            fps, w, h = 10, im0.shape[1], im0.shape[0]
                             save_path += '.mp4'
-                        #vid_writer[0] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
-                    #vid_writer[0].write(im0)
-        '''
-        if infraction:
-            predictions_to_save = []
-            for i, det in enumerate(pred):
-                if len(det):
-                    det = det.astype(np.float64)
-                    det[:4] = scale_coords(img.shape[2:], det[:4], im0.shape).round()
-                    predictions_to_save.append(list(det[0]))
-            cv2.imwrite(f'runs/infraction/images/{video_name}_{str(frame_number).zfill(7)}.jpg',clean_image)
-            predictions_to_save = np.array(predictions_to_save)
-            with open(f'runs/infraction/labels/{video_name}_{str(frame_number).zfill(7)}.npy', 'wb') as f:
-                np.save(f, predictions_to_save)
-        '''
+                        vid_writer[0] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
+                    vid_writer[0].write(im0)
+        
         del clean_image
     
-    '''
-    fp_box_height_list = np.array(fp_box_height_list)
-    fp_mean_color_list = np.array(fp_mean_color_list)
-    fn_box_height_list = np.array(fn_box_height_list)
-    fn_mean_color_list = np.array(fn_mean_color_list)
-    tp_box_height_list = np.array(tp_box_height_list)
-    tp_mean_color_list = np.array(tp_mean_color_list)
-    
-    with open(f'color_height/fp_box_height_list.npy', 'wb') as f:
-        np.save(f, fp_box_height_list)
-    with open(f'color_height/fp_mean_color_list.npy', 'wb') as f:
-        np.save(f, fp_mean_color_list)
-    with open(f'color_height/fn_box_height_list.npy', 'wb') as f:
-        np.save(f, fn_box_height_list)
-    with open(f'color_height/fn_mean_color_list.npy', 'wb') as f:
-        np.save(f, fn_mean_color_list)
-    with open(f'color_height/tp_box_height_list.npy', 'wb') as f:
-        np.save(f, tp_box_height_list)
-    with open(f'color_height/tp_mean_color_list.npy', 'wb') as f:
-        np.save(f, tp_mean_color_list)
-    '''
-    df.to_csv("results.csv",index=False)
+    df.to_csv("result_15buffer.csv",index=False)
     # Print results
     if save_txt or save_img:
         s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if save_txt else ''

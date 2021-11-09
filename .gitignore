@@ -4,3 +4,14 @@
 *.png
 *.pth
 *.pt
+dataset_ppe/
+10cl_weights/
+buckets/
+color_height/
+dataset_ppe_old/
+runs/
+test/
+val/
+videos/
+videos_to_detect_10-27-19-20/
+*.csv
