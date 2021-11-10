@@ -366,7 +366,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             f1_round,loss_round = [round(el,3) for el in f1_05],[round(el,7) for el in loss]
             print(f'\nf1_05 = {f1_round}, loss = {loss_round}\n')
             fi = (f1_round[0]+f1_round[1]+f1_round[3]+f1_round[4]+f1_round[6]+\
-                f1_round[7])/6
+                f1_round[7]+f1_round[8])/7
             if fi >= best_fitness:
                 best_fitness = fi
 

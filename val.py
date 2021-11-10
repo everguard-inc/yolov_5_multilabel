@@ -142,7 +142,7 @@ def run(data,
     conf_list_th = [0.5, 0.5, 0.2, 0.5, 0.5, 0.2, 0.5, 0.5, 0.2, 0.5]
     dt = [0.0, 0.0, 0.0]
     loss = torch.zeros(3, device=device)
-    nc = 9
+    nc = 10
     metrics_dict = {'tp':0,'tn':0,'fp':0,'fn':0}
     metrics_05 = []
     for _ in range(nc):
