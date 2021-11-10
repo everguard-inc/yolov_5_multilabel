@@ -190,7 +190,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 
         del ckpt, csd
 
-    # Image sizes
+    # Image sizesse
     gs = max(int(model.stride.max()), 32)  # grid size (max stride)
     nl = model.model[-1].nl  # number of detection layers (used for scaling hyp['obj'])
     imgsz = check_img_size(opt.imgsz, gs, floor=gs * 2)  # verify imgsz is gs-multiple
@@ -208,7 +208,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 
     # Trainloader
     train_loader, dataset = create_dataloader(train_path, imgsz, batch_size, gs, single_cls,
-                                              hyp=hyp, augment=True, cache=opt.cache, rect=True, rank=RANK,
+                                              hyp=hyp, augment=True, cache=opt.cache, rect=False, rank=RANK,
                                               workers=workers, image_weights=opt.image_weights, quad=opt.quad,
                                               prefix=colorstr('train: '))
     mlc = int(np.concatenate(dataset.labels, 0)[:, 0].max())  # max label class
@@ -218,8 +218,8 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     # Process 0
     if RANK in [-1, 0]:
         val_loader = create_dataloader(val_path, imgsz, batch_size, gs, single_cls,
-                                       hyp=hyp, cache=None if noval else opt.cache, rect=True, rank=-1,
-                                       workers=workers, pad=0.5,
+                                       hyp=hyp, cache=None if noval else opt.cache, rect=False, rank=-1,
+                                       workers=workers, pad=0,
                                        prefix=colorstr('val: '))[0]
 
         if not resume:
@@ -291,6 +291,8 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             ni = i + nb * epoch  # number integrated batches (since train start)
             imgs = imgs.to(device, non_blocking=True).float() / 255.0  # uint8 to float32, 0-255 to 0.0-1.0
             
+            
+
             # Warmup
             if ni <= nw:
                 xi = [0, nw]  # x interp
