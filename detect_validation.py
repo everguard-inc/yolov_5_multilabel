@@ -40,7 +40,7 @@ def detection_metrics(predicts,targets):
 @torch.no_grad()
 def run(weights='yolov5s.pt',  # model.pt path(s)
         source='data/images',  # file/dir/URL/glob, 0 for webcam
-        imgsz=736,  # inference size (pixels)
+        imgsz=1280,  # inference size (pixels)
         conf_thres=0.4,  # confidence threshold
         iou_thres=0.45,  # NMS IOU threshold
         iou_thres_post = 0.8,
@@ -71,7 +71,7 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
     half = True
     
     df = pd.read_csv("events.csv")
-    df["result_15buffer"] = 0
+    df["result_5buffer"] = 0
 
     # Directorieso
     save_dir = increment_path(Path(project) / name, exist_ok=exist_ok)  # increment run
@@ -142,7 +142,7 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
     
     for path, img, im0s, vid_cap, frame_number in tqdm(dataset):
         if frame_number == 1:
-            person_tracker = KFTracker(buffer_size = 15)
+            person_tracker = KFTracker(buffer_size = 5)
 
         video_name = path.split('/')[-1].split('.')[0]
         uid = path.split('/')[-1].split('_')[-1].split('.')[0]
@@ -223,10 +223,10 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
             im0 = person_tracker.visualize(im0)
             wrong_boxes_per_frame = labels.count(needed_labels[1])
             try:
-                df.loc[df['Event uid']==uid, 'result_15buffer'] += wrong_boxes_per_frame
+                df.loc[df['Event uid']==uid, 'result_5buffer'] += wrong_boxes_per_frame
             except:
                 print("Event absent")
-        save_img = False
+        save_img = True
         if save_img:
                 if dataset.mode == 'image':
                     cv2.imwrite(save_path, im0)
@@ -247,7 +247,7 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
         
         del clean_image
     
-    df.to_csv("result_15buffer.csv",index=False)
+    df.to_csv("result_5buffer.csv",index=False)
     # Print results
     if save_txt or save_img:
         s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if save_txt else ''
@@ -259,7 +259,7 @@ def parse_opt():
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', nargs='+', type=str, default='yolov5s.pt', help='model path(s)')
     parser.add_argument('--source', type=str, default='data/images', help='file/dir/URL/glob, 0 for webcam')
-    parser.add_argument('--imgsz', '--img', '--img-size', nargs='+', type=int, default=[736], help='inference size h,w')
+    parser.add_argument('--imgsz', '--img', '--img-size', nargs='+', type=int, default=[1280], help='inference size h,w')
     parser.add_argument('--conf-thres', type=float, default=0.4, help='confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.4, help='NMS IoU threshold')
     parser.add_argument('--max-det', type=int, default=1000, help='maximum detections per image')

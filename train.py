@@ -191,7 +191,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
         del ckpt, csd
 
     # Image sizes
-    gs = max(int(model.stride.max()), 32)  # grid size (max stride)
+    gs = min(int(model.stride.max()), 32)  # grid size (max stride)
     nl = model.model[-1].nl  # number of detection layers (used for scaling hyp['obj'])
     imgsz = check_img_size(opt.imgsz, gs, floor=gs * 2)  # verify imgsz is gs-multiple
 
@@ -268,6 +268,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     for epoch in range(start_epoch, epochs):  # epoch ------------------------------------------------------------------
         model.train()
 
+
         # Update image weights (optional, single-GPU only)
         if opt.image_weights:
             cw = model.class_weights.cpu().numpy() * (1 - maps) ** 2 / nc  # class weights
@@ -289,7 +290,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
         for i, (imgs, targets, paths, _) in pbar:  # batch -------------------------------------------------------------
             ni = i + nb * epoch  # number integrated batches (since train start)
             imgs = imgs.to(device, non_blocking=True).float() / 255.0  # uint8 to float32, 0-255 to 0.0-1.0
-
+            
             # Warmup
             if ni <= nw:
                 xi = [0, nw]  # x interp
@@ -349,6 +350,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             ema.update_attr(model, include=['yaml', 'nc', 'hyp', 'names', 'stride', 'class_weights'])
             final_epoch = (epoch + 1 == epochs) or stopper.possible_stop
             if not noval or final_epoch:  # Calculate f1
+                print('imgsz = ',imgsz)
                 f1_05,loss = val.run(data_dict,
                                            batch_size=batch_size // WORLD_SIZE * 2,
                                            imgsz=imgsz,
@@ -364,7 +366,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             f1_round,loss_round = [round(el,3) for el in f1_05],[round(el,7) for el in loss]
             print(f'\nf1_05 = {f1_round}, loss = {loss_round}\n')
             fi = (f1_round[0]+f1_round[1]+f1_round[3]+f1_round[4]+f1_round[6]+\
-                f1_round[7] + f1_round[9])/7
+                f1_round[7])/6
             if fi >= best_fitness:
                 best_fitness = fi
 
@@ -435,7 +437,7 @@ def parse_opt(known=False):
     parser.add_argument('--hyp', type=str, default='data/hyps/hyp.scratch-high.yaml', help='hyperparameters path')
     parser.add_argument('--epochs', type=int, default=300)
     parser.add_argument('--batch-size', type=int, default=16, help='total batch size for all GPUs')
-    parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=1280, help='train, val image size (pixels)')
+    parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=960, help='train, val image size (pixels)')
     parser.add_argument('--rect', action='store_true', help='rectangular training')
     parser.add_argument('--resume', nargs='?', const=True, default=False, help='resume most recent training')
     parser.add_argument('--nosave', action='store_true', help='only save final checkpoint')

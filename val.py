@@ -114,9 +114,8 @@ def run(data,
         # Load model
         check_suffix(weights, '.pt')
         model = attempt_load(weights, map_location=device)  # load FP32 model
-        gs = max(int(model.stride.max()), 32)  # grid size (max stride)
+        gs = 0 #min(int(model.stride.max()), 32)  # grid size (max stride)
         imgsz = check_img_size(imgsz, s=gs)  # check image size
-
         # Multi-GPU disabled, incompatible with .half() https://github.com/ultralytics/yolov5/issues/99
         # if device.type != 'cpu' and torch.cuda.device_count() > 1:
         #     model = nn.DataParallel(model)
@@ -138,12 +137,12 @@ def run(data,
         if device.type != 'cpu':
             model(torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(next(model.parameters())))  # run once
         task = task if task in ('train', 'val', 'test') else 'val'  # path to train/val/test images
-        dataloader = create_dataloader(data[task], imgsz, batch_size, gs, single_cls, pad=0, rect=True,
+        dataloader = create_dataloader(data[task], imgsz, batch_size, gs, single_cls, pad=0, rect=False, stride = 0,
                                        prefix=colorstr(f'{task}: '))[0]
     conf_list_th = [0.5, 0.5, 0.2, 0.5, 0.5, 0.2, 0.5, 0.5, 0.2, 0.5]
     dt = [0.0, 0.0, 0.0]
     loss = torch.zeros(3, device=device)
-    nc = 10
+    nc = 9
     metrics_dict = {'tp':0,'tn':0,'fp':0,'fn':0}
     metrics_05 = []
     for _ in range(nc):
@@ -167,9 +166,10 @@ def run(data,
 
         # Run NMS
         targets[:, -4:] *= torch.Tensor([width, height, width, height]).to(device)  # to pixels
+
         lb = [targets[targets[:, 0] == i, 1:] for i in range(nb)] if save_hybrid else []  # for autolabelling
         targets[:,-4:] = xywh2xyxy(targets[:,-4:])
-        t3 = time_sync()
+
         out = non_max_suppression(out, conf_thres, iou_thres, labels=lb, multi_label=True, agnostic=single_cls)
         targets = targets.detach().cpu().numpy()
         metrics_05 = get_metrics(out,targets,metrics_05,0.5,conf_list_th)

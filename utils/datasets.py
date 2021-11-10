@@ -91,8 +91,8 @@ def exif_transpose(image):
     return image
 
 
-def create_dataloader(path, imgsz, batch_size, stride, single_cls=False, hyp=None, augment=False, cache=False, pad=0.0,
-                      rect=False, rank=-1, workers=8, image_weights=False, quad=False, prefix=''):
+def create_dataloader(path, imgsz, batch_size, stride = 32, single_cls=False, hyp=None, augment=False, cache=False, pad=0.0,
+                      rect=False, rank=-1, workers=8, image_weights=True, quad=False, prefix=''):
     # Make sure only the first process in DDP process the dataset first, and the following others can use the cache
     with torch_distributed_zero_first(rank):
         dataset = LoadImagesAndLabels(path, imgsz, batch_size,
@@ -155,7 +155,7 @@ class _RepeatSampler(object):
 
 
 class LoadImages:  # for inference
-    def __init__(self, path, img_size=640, stride=32, auto=True):
+    def __init__(self, path, img_size=640, stride=0, auto=True):
         p = str(Path(path).resolve())  # os-agnostic absolute path
         if '*' in p:
             files = sorted(glob.glob(p, recursive=True))  # glob
@@ -399,7 +399,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
     cache_version = 0.5  # dataset labels *.cache version
 
     def __init__(self, path, img_size=640, batch_size=1, augment=False, hyp=None, rect=False, image_weights=False,
-                 cache_images=False, single_cls=False, stride=32, pad=0.0, prefix=''):
+                 cache_images=False, single_cls=False, stride=0, pad=0.0, prefix=''):
         self.img_size = img_size
         self.augment = augment
         self.hyp = hyp
@@ -408,9 +408,10 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         self.mosaic = self.augment and not self.rect  # load 4 images at a time into a mosaic (only during training)
         self.mosaic_border = [-img_size // 2, -img_size // 2]
         self.stride = stride
+        
         self.path = path
         self.albumentations = Albumentations() if augment else None
-        self.num_classes = 10
+        self.num_classes = 9
         self.multi_label = True
 
         try:
@@ -586,9 +587,9 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
             # Load image
             img, (h0, w0), (h, w) = load_image(self, index)
             # Letterbox
-            self.rect = True
+            self.rect = False
             shape = self.batch_shapes[self.batch[index]] if self.rect else self.img_size  # final letterboxed shape
-            img, ratio, pad = letterbox(img, shape, auto=False, scaleup=self.augment)
+            img, ratio, pad = letterbox(img, shape, auto=True, scaleup=self.augment)
             shapes = (h0, w0), ((h / h0, w / w0), pad)  # for COCO mAP rescaling
 
             labels = self.labels[index].copy()
