@@ -191,7 +191,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
         del ckpt, csd
 
     # Image sizes
-    gs = min(int(model.stride.max()), 32)  # grid size (max stride)
+    gs = max(int(model.stride.max()), 32)  # grid size (max stride)
     nl = model.model[-1].nl  # number of detection layers (used for scaling hyp['obj'])
     imgsz = check_img_size(opt.imgsz, gs, floor=gs * 2)  # verify imgsz is gs-multiple
 
