@@ -411,7 +411,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         
         self.path = path
         self.albumentations = Albumentations() if augment else None
-        self.num_classes = 9
+        self.num_classes = 10
         self.multi_label = True
 
         try:
@@ -589,7 +589,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
             # Letterbox
             self.rect = False
             shape = self.batch_shapes[self.batch[index]] if self.rect else self.img_size  # final letterboxed shape
-            img, ratio, pad = letterbox(img, shape, auto=True, scaleup=self.augment)
+            img, ratio, pad = letterbox(img, shape, auto=False, scaleup=self.augment)
             shapes = (h0, w0), ((h / h0, w / w0), pad)  # for COCO mAP rescaling
 
             labels = self.labels[index].copy()
