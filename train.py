@@ -306,19 +306,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             ni = i + nb * epoch  # number integrated batches (since train start)
             imgs = imgs.to(device, non_blocking=True).float() / 255.0  # uint8 to float32, 0-255 to 0.0-1.0
 
-            for t_ind,img in enumerate(imgs):
-                image = img.detach().cpu().numpy()
-                image = np.ascontiguousarray(image, dtype=np.float32)*255
-                image = np.moveaxis(image, 0, -1)
-                image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB).astype(np.uint8)
-                temp_targets = targets.detach().cpu().numpy()
-                temp_targets = temp_targets[(temp_targets[...,0]==t_ind).nonzero()[0]]
-                temp_targets[:, -4:] *= np.array([960, 736, 736, 736])  # to pixels
-                temp_targets[:,-4:] = xywh2xyxy(temp_targets[:,-4:])
-                boxes = temp_targets[:,-4:].astype(int)
-                for target in boxes:
-                    cv2.rectangle(image,(target[0],target[1]),(target[2],target[3]),(0,0,255),2)
-                cv2.imwrite(f'test/train/image_{i}_{t_ind}.jpg',image)
+            
             # Warmup
             if ni <= nw:
                 xi = [0, nw]  # x interp
