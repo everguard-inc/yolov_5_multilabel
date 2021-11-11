@@ -452,14 +452,22 @@ def colorstr(*input):
     return ''.join(colors[x] for x in args) + f'{string}' + colors['end']
 
 
+def one_hot_to_list(arr):
+    arr = arr.astype(int)
+    labels = []
+    for box in arr:
+        for index,label in enumerate(box):
+            if label == 1:
+                labels.append(index)
+    return labels
+
 def labels_to_class_weights(labels, nc=80):
     # Get class weights (inverse frequency) from training labels
     if labels[0] is None:  # no labels loaded
         return torch.Tensor()
-
     labels = np.concatenate(labels, 0)  # labels.shape = (866643, 5) for COCO
-    classes = labels[:, 0].astype(np.int)  # labels = [class xywh]
-    weights = np.bincount(classes, minlength=nc)  # occurrences per class
+    classes = labels[:, :-4] # labels = [class xywh]
+    weights = np.bincount(one_hot_to_list(classes), minlength=nc)  # occurrences per class
 
     # Prepend gridpoint count (for uCE training)
     # gpi = ((320 / 32 * np.array([1, 2, 4])) ** 2 * 3).sum()  # gridpoints per image
@@ -472,10 +480,11 @@ def labels_to_class_weights(labels, nc=80):
 
 
 def labels_to_image_weights(labels, nc=80, class_weights=np.ones(80)):
+
     # Produces image weights based on class_weights and image contents
-    class_counts = np.array([np.bincount(x[:, 0].astype(np.int), minlength=nc) for x in labels])
+    class_counts = np.array([np.bincount(one_hot_to_list(x[:,:-4]), minlength=nc) for x in labels])
     image_weights = (class_weights.reshape(1, nc) * class_counts).sum(1)
-    # index = random.choices(range(n), weights=image_weights, k=1)  # weight image sample
+
     return image_weights
 
 
