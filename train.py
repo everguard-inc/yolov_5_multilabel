@@ -284,7 +284,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 
         # Update image weights (optional, single-GPU only)
         if opt.image_weights:
-            cw = model.class_weights.cpu().numpy() * (1 - maps) ** 2 / nc  # class weights
+            cw = model.class_weights.cpu().numpy() / nc  # class weights
             print('cw = ',cw)
             iw = labels_to_image_weights(dataset.labels, nc=nc, class_weights=cw)  # image weights
             dataset.indices = random.choices(range(dataset.n), weights=iw, k=dataset.n)  # rand weighted idx
@@ -382,9 +382,9 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             print(f'\nf1_05 = {f1_round}, loss = {loss_round}\n')
             fi = (f1_round[0]+f1_round[1]+f1_round[3]+f1_round[4]+f1_round[6]+\
                 f1_round[7]+f1_round[9])/7
-            maps = np.array(f1_round)
-            for class_ind in unrecognized_classes:
-                maps[class_ind] = 0.95
+            #maps = np.array(f1_round)
+            #for class_ind in unrecognized_classes:
+                #maps[class_ind] = 0.95
 
             if fi >= best_fitness:
                 best_fitness = fi
