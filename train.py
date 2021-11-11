@@ -306,6 +306,19 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             ni = i + nb * epoch  # number integrated batches (since train start)
             imgs = imgs.to(device, non_blocking=True).float() / 255.0  # uint8 to float32, 0-255 to 0.0-1.0
 
+            for t_ind,img in enumerate(imgs):
+                image = img.detach().cpu().numpy()
+                image = np.ascontiguousarray(image, dtype=np.float32)*255
+                image = np.moveaxis(image, 0, -1)
+                image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB).astype(np.uint8)
+                temp_targets = targets.detach().cpu().numpy()
+                temp_targets = temp_targets[(temp_targets[...,0]==t_ind).nonzero()[0]]
+                temp_targets[:, -4:] *= np.array([960, 736, 736, 736])  # to pixels
+                temp_targets[:,-4:] = xywh2xyxy(temp_targets[:,-4:])
+                boxes = temp_targets[:,-4:].astype(int)
+                for target in boxes:
+                    cv2.rectangle(image,(target[0],target[1]),(target[2],target[3]),(0,0,255),2)
+                cv2.imwrite(f'test/train/image_{i}_{t_ind}.jpg',image)
             # Warmup
             if ni <= nw:
                 xi = [0, nw]  # x interp
@@ -365,7 +378,6 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             ema.update_attr(model, include=['yaml', 'nc', 'hyp', 'names', 'stride', 'class_weights'])
             final_epoch = (epoch + 1 == epochs) or stopper.possible_stop
             if not noval or final_epoch:  # Calculate f1
-                print('imgsz = ',imgsz)
                 f1_05,loss = val.run(data_dict,
                                            batch_size=batch_size // WORLD_SIZE * 2,
                                            imgsz=imgsz,
@@ -456,7 +468,7 @@ def parse_opt(known=False):
     parser.add_argument('--hyp', type=str, default='data/hyps/hyp.scratch-high.yaml', help='hyperparameters path')
     parser.add_argument('--epochs', type=int, default=300)
     parser.add_argument('--batch-size', type=int, default=16, help='total batch size for all GPUs')
-    parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=1088, help='train, val image size (pixels)')
+    parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=960, help='train, val image size (pixels)')
     parser.add_argument('--rect', action='store_true', help='rectangular training')
     parser.add_argument('--resume', nargs='?', const=True, default=False, help='resume most recent training')
     parser.add_argument('--nosave', action='store_true', help='only save final checkpoint')

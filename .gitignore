@@ -17,3 +17,4 @@ videos_to_detect_10-27-19-20/
 *.csv
 runs/
 toledo/
+dataset_ppe_mini/
