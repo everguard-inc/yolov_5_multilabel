@@ -27,7 +27,7 @@ from tqdm import tqdm
 
 from utils.augmentations import Albumentations, augment_hsv, copy_paste, letterbox, mixup, random_perspective
 from utils.general import check_dataset, check_requirements, check_yaml, clean_str, segments2boxes, \
-    xywh2xyxy, xywhn2xyxy, xyxy2xywhn, xyn2xy
+    xywh2xyxy, xywhn2xyxy, xyxy2xywhn, xyn2xy, check_img_size
 from utils.torch_utils import torch_distributed_zero_first
 
 # Parameters
@@ -398,14 +398,14 @@ def merge_equal_objects(labels,num_classes):
 class LoadImagesAndLabels(Dataset):  # for training/testing
     cache_version = 0.5  # dataset labels *.cache version
 
-    def __init__(self, path, img_size=640, batch_size=1, augment=False, hyp=None, rect=False, image_weights=False,
+    def __init__(self, path, img_size=640, batch_size=1, augment=False, hyp=None, rect=False, image_weights=True,
                  cache_images=False, single_cls=False, stride=0, pad=0.0, prefix=''):
         self.img_size = img_size
         self.augment = augment
         self.hyp = hyp
         self.image_weights = image_weights
-        self.rect = True
-        self.mosaic = self.augment and not self.rect  # load 4 images at a time into a mosaic (only during training)
+        self.rect = False #False if image_weights else rect
+        self.mosaic = False #self.augment and not self.rect  # load 4 images at a time into a mosaic (only during training)
         self.mosaic_border = [-img_size // 2, -img_size // 2]
         self.stride = stride
         
@@ -476,7 +476,8 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         self.batch = bi  # batch index of image
         self.n = n
         self.indices = range(n)
-
+        
+        self.rect = False
         if self.rect:
             # Sort by aspect ratio
             s = self.shapes  # wh
@@ -573,6 +574,8 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         
         mosaic = self.mosaic and random.random() < hyp['mosaic']
         mosaic = False
+        self.rect = False
+        self.mosaic = False
         if mosaic:
             # Load mosaic
             img, labels = load_mosaic(self, index)
@@ -584,14 +587,11 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                 img, labels = mixup(img, labels, *load_mosaic(self, random.randint(0, self.n - 1)))
         
         else:
-            # Load image
-            img, (h0, w0), (h, w) = load_image(self, index)
-            # Letterbox
-            self.rect = False
-            shape = self.batch_shapes[self.batch[index]] if self.rect else self.img_size  # final letterboxed shape
-            img, ratio, pad = letterbox(img, shape, auto=False, scaleup=self.augment)
-            shapes = (h0, w0), ((h / h0, w / w0), pad)  # for COCO mAP rescaling
 
+            shape = self.batch_shapes[self.batch[index]] if self.rect else self.img_size  # final letterboxed shape
+            img, (h0, w0), (h, w) = load_image_custom(self, index, img_size=shape, ratio = 1920/1080)
+            img, ratio, pad = letterbox(img, shape, auto=True, scaleup=self.augment)
+            shapes = (h0, w0), ((h / h0, w / w0), pad)  # for COCO mAP rescaling
             labels = self.labels[index].copy()
             if labels.size:  # normalized xywh to pixel xyxy format
                 labels[:, -4:] = xywhn2xyxy(labels[:, -4:], ratio[0] * w, ratio[1] * h, padw=pad[0], padh=pad[1])
@@ -674,7 +674,6 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         return torch.stack(img4, 0), torch.cat(label4, 0), path4, shapes4
 
 
-# Ancillary functions --------------------------------------------------------------------------------------------------
 def load_image(self, i):
     # loads 1 image from dataset index 'i', returns im, original hw, resized hw
     im = self.imgs[i]
@@ -685,12 +684,33 @@ def load_image(self, i):
         else:  # read image
             path = self.img_files[i]
             im = cv2.imread(path)  # BGR
-            assert im is not None, 'Image Not Found ' + path
+            assert im is not None, f'Image Not Found {path}'
         h0, w0 = im.shape[:2]  # orig hw
         r = self.img_size / max(h0, w0)  # ratio
         if r != 1:  # if sizes are not equal
             im = cv2.resize(im, (int(w0 * r), int(h0 * r)),
                             interpolation=cv2.INTER_AREA if r < 1 and not self.augment else cv2.INTER_LINEAR)
+        return im, (h0, w0), im.shape[:2]  # im, hw_original, hw_resized
+    else:
+        return self.imgs[i], self.img_hw0[i], self.img_hw[i]  # im, hw_original, hw_resized
+
+# Ancillary functions --------------------------------------------------------------------------------------------------
+def load_image_custom(self, i, img_size, ratio):
+    # loads 1 image from dataset index 'i', returns im, original hw, resized hw
+    image_width = img_size
+    image_height = check_img_size(int(image_width//ratio),32,32*2)
+    im = self.imgs[i]
+    if im is None:  # not cached in ram
+        npy = self.img_npy[i]
+        if npy and npy.exists():  # load npy
+            im = np.load(npy)
+        else:  # read image
+            path = self.img_files[i]
+            im = cv2.imread(path)  # BGR
+            assert im is not None, 'Image Not Found ' + path
+        h0, w0 = im.shape[:2]  # orig hw
+        im = cv2.resize(im, (image_width,image_height),
+                            interpolation= cv2.INTER_LINEAR)
         return im, (h0, w0), im.shape[:2]  # im, hw_original, hw_resized
     else:
         return self.imgs[i], self.img_hw0[i], self.img_hw[i]  # im, hw_original, hw_resized
