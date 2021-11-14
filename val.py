@@ -76,7 +76,7 @@ def process_batch(detections, labels, iouv):
 def run(data,
         weights=None,  # model.pt path(s)
         batch_size=32,  # batch size
-        imgsz=640,  # inference size (pixels)
+        imgsz=960,  # inference size (pixels)
         conf_thres=0.4,  # confidence threshold
         iou_thres=0.4,  # NMS IoU threshold
         task='val',  # train, val, test, speed or study
@@ -140,7 +140,7 @@ def run(data,
         task = task if task in ('train', 'val', 'test') else 'val'  # path to train/val/test images
         dataloader = create_dataloader(data[task], imgsz, batch_size, gs, single_cls, pad=0, rect=True,
                                        prefix=colorstr(f'{task}: '))[0]
-    conf_list_th = [0.4, 0.4, 0.2, 0.4, 0.4, 0.2, 0.4, 0.2, 0.2, 0.4]
+    conf_list_th = [0.5, 0.5, 0.2, 0.5, 0.5, 0.2, 0.5, 0.5, 0.2, 0.4]
     dt = [0.0, 0.0, 0.0]
     loss = torch.zeros(3, device=device)
     nc = 10

@@ -132,8 +132,8 @@ def get_metrics(out,targets,metrics,iou_th,conf_th_list):
         predicts = predicts.detach().cpu().numpy()
         filtered_predicts = []
         for pred in predicts:
-            #conf_th = conf_th_list[int(pred[-1])]
-            if pred[-2]>=conf_th_list:
+            conf_th = conf_th_list[int(pred[-1])]
+            if pred[-2]>=conf_th:
                 filtered_predicts.append(pred)
         temp_predicts = np.array(filtered_predicts).astype(int)
         temp_targets = targets[(targets[...,0]==index).nonzero()[0]].astype(int)

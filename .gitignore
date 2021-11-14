@@ -4,3 +4,5 @@
 *.png
 *.pth
 *.pt
+dataset_ppe_mini/
+runs/
