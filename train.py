@@ -163,7 +163,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
         lf = lambda x: (1 - x / (epochs - 1)) * (1.0 - hyp['lrf']) + hyp['lrf']  # linear
     else:
         #lf = one_cycle(1, hyp['lrf'], epochs)  # cosine 1->hyp['lrf']
-        scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode = 'min', factor=0.2, patience = 2, threshold = 1e-6,)  # plot_lr_scheduler(optimizer, scheduler, epochs)
+        scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode = 'min', factor=0.2, patience = 2, threshold = 1e-7)  # plot_lr_scheduler(optimizer, scheduler, epochs)
 
     # EMA
     ema = ModelEMA(model) if RANK in [-1, 0] else None
@@ -373,7 +373,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                                            plots=plots and final_epoch,
                                            callbacks=callbacks,
                                            compute_loss=compute_loss)
-                scheduler.step(loss.mean())
+                scheduler.step(np.array(loss).mean())
                 lr = [x['lr'] for x in optimizer.param_groups]  # for loggers
                 print('lr = ',lr)
 
