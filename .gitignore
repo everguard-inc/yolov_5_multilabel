@@ -18,3 +18,5 @@ videos_to_detect_10-27-19-20/
 runs/
 toledo/
 dataset_ppe_mini/
+test1
+detect_validation.py
