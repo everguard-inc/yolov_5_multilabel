@@ -263,6 +263,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 
     model.class_weights = class_weights * nc
     model.names = names
+    best_metrics = None
 
     # Start training
     t0 = time.time()
@@ -303,7 +304,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
         for i, (imgs, targets, paths, _) in pbar:  # batch -------------------------------------------------------------
             ni = i + nb * epoch  # number integrated batches (since train start)
             imgs = imgs.to(device, non_blocking=True).float() / 255.0  # uint8 to float32, 0-255 to 0.0-1.0
-
+            '''
             # Warmup
             if ni <= nw:
                 xi = [0, nw]  # x interp
@@ -314,7 +315,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                     x['lr'] = np.interp(ni, xi, [hyp['warmup_bias_lr'] if j == 2 else 0.0, x['initial_lr'] * lf(epoch)])
                     if 'momentum' in x:
                         x['momentum'] = np.interp(ni, xi, [hyp['warmup_momentum'], hyp['momentum']])
-
+            '''
             # Multi-scale
             if opt.multi_scale:
                 sz = random.randrange(imgsz * 0.5, imgsz * 1.5 + gs) // gs * gs  # size
@@ -381,7 +382,8 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                 f1_round[7]+f1_round[9])/7
             if fi >= best_fitness:
                 best_fitness = fi
-
+                best_metrics = f1_round
+            print('best f1 = ',best_metrics)
             # Save model
             if (not nosave) or (final_epoch and not evolve):  # if save
                 ckpt = {'epoch': epoch,
@@ -449,7 +451,7 @@ def parse_opt(known=False):
     parser.add_argument('--hyp', type=str, default='data/hyps/hyp.scratch.yaml', help='hyperparameters path')
     parser.add_argument('--epochs', type=int, default=300)
     parser.add_argument('--batch-size', type=int, default=16, help='total batch size for all GPUs')
-    parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=960, help='train, val image size (pixels)')
+    parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=736, help='train, val image size (pixels)')
     parser.add_argument('--rect', action='store_true', help='rectangular training')
     parser.add_argument('--resume', nargs='?', const=True, default=False, help='resume most recent training')
     parser.add_argument('--nosave', action='store_true', help='only save final checkpoint')
