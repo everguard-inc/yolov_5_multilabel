@@ -6,3 +6,6 @@
 *.pt
 dataset_ppe_mini/
 runs/
+plateu
+test
+dataset_ppe
