@@ -548,7 +548,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         hyp = self.hyp
         
         mosaic = self.mosaic and random.random() < hyp['mosaic']
-        mosaic = True
+        
         if mosaic:
             # Load mosaic
             img, labels = load_mosaic(self, index)
