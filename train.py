@@ -366,7 +366,8 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                                            verbose=nc < 50 and final_epoch,
                                            plots=plots and final_epoch,
                                            callbacks=callbacks,
-                                           compute_loss=compute_loss)
+                                           compute_loss=compute_loss,
+                                           iou_thres=0.2)
             f1_round,loss_round = [round(el,3) for el in f1_05],[round(el,7) for el in loss]
             print(f'\nf1_05 = {f1_round}, loss = {loss_round}\n')
             fi = (f1_round[0]+f1_round[1]+f1_round[3]+f1_round[4]+f1_round[6]+\
@@ -420,7 +421,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                                             batch_size=batch_size // WORLD_SIZE * 2,
                                             imgsz=imgsz,
                                             model=attempt_load(m, device).half(),
-                                            iou_thres=0.7,  # NMS IoU threshold for best pycocotools results
+                                            iou_thres=0.5,  # NMS IoU threshold for best pycocotools results
                                             single_cls=single_cls,
                                             dataloader=val_loader,
                                             save_dir=save_dir,

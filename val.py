@@ -77,7 +77,7 @@ def run(data,
         weights=None,  # model.pt path(s)
         batch_size=32,  # batch size
         imgsz=640,  # inference size (pixels)
-        conf_thres=0.01,  # confidence threshold
+        conf_thres=0.2,  # confidence threshold
         iou_thres=0.45,  # NMS IoU threshold
         task='val',  # train, val, test, speed or study
         device='',  # cuda device, i.e. 0 or 0,1,2,3 or cpu
