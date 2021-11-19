@@ -30,8 +30,8 @@ from utils.general import apply_classifier, check_img_size, check_imshow, check_
     strip_optimizer, xyxy2xywh
 from utils.plots import Annotator, colors
 from utils.torch_utils import load_classifier, select_device, time_sync
-from utils.metrics import predicts_to_multilabel_numpy, iou_batch_numpy, bbox_iou_numpy, bbox_io_mean_numpy
-from utils.kalman_tracker import KFTracker, labels_dict_to_list, visualize_custom
+from utils.metrics import predicts_to_multilabel_numpy
+from utils.kalman_tracker import KFTracker, labels_dict_to_list
 from tqdm import tqdm
 import joblib
 
@@ -65,14 +65,12 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
         hide_conf=False,  # hide confidences
         half=True,  # use FP16 half-precision inference
         ):
-    name = 'toledo_736_736_buffer_1'
+    name = 'test'
     save_img = not nosave and not source.endswith('.txt')  # save inference images
     webcam = source.isnumeric() or source.endswith('.txt') or source.lower().startswith(
         ('rtsp://', 'rtmp://', 'http://', 'https://'))
     half = True
-    in_harness_classification_model = joblib.load('buckets_stats/rf_model.joblib')
-    df = pd.read_csv("events.csv")
-    df["result_1buffer"] = 0
+    in_harness_classification_model = joblib.load('models/rf_model.joblib')
 
     # Directorieso
     save_dir = increment_path(Path(project) / name, exist_ok=exist_ok)  # increment run
@@ -143,25 +141,7 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
     
     for path, img, im0s, vid_cap, frame_number in tqdm(dataset):
         if frame_number == 1:
-            person_tracker = KFTracker(buffer_size = 1)
-        video_name = path.split('/')[-1].split('.')[0]
-        #print(video_name)
-        uid = path.split('/')[-1].split('_')[-1].split('.')[0]
-        try:
-            event_type = df[df['Event uid']==uid]['Event Name'].iloc[0]
-        except:
-            print(f"Event absent {video_name} {uid}")
-            event_type = "None"
-            continue
-
-        if event_type == "PPE - No Safety Vest":
-            needed_labels = [3, 4]
-        if event_type == "PPE - No Hard Hat":
-            needed_labels = [6, 7]
-        if event_type == "PPE - No Harness":
-            needed_labels = [0, 1]
-        if event_type == 'None':
-            continue
+            person_tracker = KFTracker(buffer_size = 3)
         if onnx:
             img = img.astype('float32')
         else:
@@ -198,10 +178,10 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
             pred[..., 3] *= imgsz[0]  # h
             pred = torch.tensor(pred)
         pred = non_max_suppression(pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det)[0]
-        conf_thres_list = [0.5,0.5,0.2,0.5,0.5,0.2,0.5,0.5,0.2,0.4]
+        conf_thres_list = [0.5,0.5,0.2,0.5,0.5,0.2,0.5,0.5,0.2,0.5]
         pred = pred.detach().cpu().numpy()
         if pred.shape[0]>1:
-            pred = predicts_to_multilabel_numpy(pred,iou_thres_post,conf_thres_list)
+            pred = predicts_to_multilabel_numpy(in_harness_classification_model,pred,iou_thres_post,conf_thres_list)
         else:
             pred = []
         # Second-stage classifier (optional)
@@ -219,27 +199,13 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
             for pred_i,_ in enumerate(pred):
                 pred[pred_i][:4] = scale_coords_1d(img.shape[2:], pred[pred_i][:4], im0.shape).round()
                 pred[pred_i][4:]= pred[pred_i][4:].astype(int)
-            labels_dict,boxes = person_tracker.update(pred)
-            if len(boxes)!=0:
-                buckets_boxes,buckets_labels,person_boxes,person_labels,extra_boxes,extra_labels = not_in_harness_check(
-                    boxes,labels_dict,in_harness_classification_model,video_name
-                    )
-
-                all_boxes = buckets_boxes.tolist()+person_boxes.tolist()+extra_boxes.tolist()
-                all_labels = buckets_labels+person_labels+extra_labels
-                im0 = visualize_custom(im0,all_boxes,all_labels)
-                #print(all_labels)
-                labels_for_count = sum(all_labels,[])
-            
-            else:
-                labels_for_count = []
-
-            wrong_boxes_per_frame = labels_for_count.count(needed_labels[1])
-            try:
-                df.loc[df['Event uid']==uid, 'result_1buffer'] += wrong_boxes_per_frame
-            except:
-                print("Event absent")
-            
+            labels_dict = person_tracker.update(pred)
+            labels = []
+            for d in labels_dict:
+                labels_list = labels_dict_to_list(d)
+                labels.append(labels_list)
+            labels = sum(labels, [])
+            im0 = person_tracker.visualize(im0)
         save_img = True
         if save_img:
                 if dataset.mode == 'image':
@@ -261,92 +227,11 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
         
         del clean_image
     
-    df.to_csv("result_1buffer.csv",index=False)
     # Print results
     if save_txt or save_img:
         s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if save_txt else ''
     if update:
         strip_optimizer(weights)  # update model (to fix SourceChangeWarning)
-
-
-#[array([[     1149.1,       337.6,      1174.9,       407.4]]),
-#  array([[     367.92,       398.1,      401.08,       437.9]]), 
-# array([[     528.61,      308.71,      553.39,      321.29]])] 
-# [{'harness': 1, 'vest': 3, 'hardhat': 6, 'crane': None}, 
-# {'harness': None, 'vest': None, 'hardhat': None, 'crane': 9}, 
-# {'harness': None, 'vest': None, 'hardhat': None, 'crane': 9}]
-def not_in_harness_check(boxes,labels,model,path):
-    buckets_boxes = []
-    buckets_labels = []
-    person_boxes = []
-    person_labels = []
-    extra_boxes = []
-    extra_labels = []
-    for i, label_dict in enumerate(labels):
-        if 9 in list(label_dict.values()):
-            buckets_boxes.append(boxes[i][0].astype(int))
-            buckets_labels.append([9])
-        elif 1 in list(label_dict.values()):
-            person_boxes.append(boxes[i][0].astype(int))
-            person_labels.append(list(label_dict.values()))
-        else:
-            extra_boxes.append(boxes[i][0].astype(int))
-            extra_labels.append(list(label_dict.values()))
-    buckets_boxes = np.array(buckets_boxes)
-    person_boxes = np.array(person_boxes)
-    extra_boxes = np.array(extra_boxes)
-    if len(person_boxes)==0:
-        return buckets_boxes,buckets_labels,person_boxes,person_labels,extra_boxes,extra_labels
-    if len(buckets_boxes)==0:
-        for index in range(len(person_labels)):
-            person_labels[index].remove(1)
-        return buckets_boxes,buckets_labels,person_boxes,person_labels,extra_boxes,extra_labels
-
-    iou_matrix = iou_batch_numpy(buckets_boxes,person_boxes)
-    iou_matrix = np.triu(iou_matrix,0)
-    matched_indices = np.c_[(iou_matrix>0).nonzero()]
-    for matched in matched_indices:
-        b_i = matched[0]
-        p_i = matched[1]
-        bucket_box = buckets_boxes[b_i]
-        person_box = person_boxes[p_i]
-        bucket_box_width = bucket_box[2] - bucket_box[0]
-        bucket_box_height = bucket_box[3] - bucket_box[1]
-        person_box_width = person_box[2] - person_box[0]
-        person_box_height = person_box[3] - person_box[1]
-        bucket_box[0] =  (bucket_box[0] + bucket_box_width*0.05).astype(int)
-        bucket_box[2] =  (bucket_box[2] - bucket_box_width*0.05).astype(int)
-        bucket_area = bucket_box_width*bucket_box_height
-        person_area = person_box_width*person_box_height
-        person_centr = (person_box[0]+person_box[2])/2
-        bucket_centr = (bucket_box[0]+bucket_box[2])/2
-        bucket_person_width_union = max(bucket_box[2],person_box[2]) - min(bucket_box[0],person_box[0])
-        centr_dist_norm = abs(bucket_centr - person_centr)/bucket_person_width_union
-        head_loc = 1 if person_box[1] < bucket_box[1] else 0
-        legs_loc = 1 if (person_box[3] < bucket_box[3]) and \
-                    (person_box[3] > bucket_box[1]) else 0
-        iou = bbox_iou_numpy(bucket_box,person_box)
-        iom = bbox_io_mean_numpy(bucket_box,person_box)
-        ['area_ratio', 'height_ratio', 'legs_loc', 'head_loc', 'iou', 'io_min',
-       'centr_x_distance_norm'],
-        test = {
-        'area_ratio':float(person_area/bucket_area).__round__(2),
-        'height_ratio':float((person_box[3]-person_box[1])/(bucket_box[3]-bucket_box[1])).__round__(2),
-        'legs_loc':legs_loc,
-        'head_loc':head_loc,
-        'iou':float(iou).__round__(2),
-        'io_min':float(iom).__round__(2),
-        'centr_x_distance_norm': float(centr_dist_norm).__round__(2)
-        }
-        prediction = model.predict([list(test.values())])[0]
-        if prediction==1:
-            print(path)
-            print("harness")
-        if prediction==0:
-            if 1 in person_labels[p_i]:
-                person_labels[p_i].remove(1)
-    return buckets_boxes,buckets_labels,person_boxes,person_labels,extra_boxes,extra_labels
-    
 
         
 

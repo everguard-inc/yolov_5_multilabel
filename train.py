@@ -279,6 +279,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                 f'Using {train_loader.num_workers} dataloader workers\n'
                 f"Logging results to {colorstr('bold', save_dir)}\n"
                 f'Starting training for {epochs} epochs...')
+
     for epoch in range(start_epoch, epochs):  # epoch ------------------------------------------------------------------
         model.train()
 
@@ -355,7 +356,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             final_epoch = (epoch + 1 == epochs) or stopper.possible_stop
             if not noval or final_epoch:  # Calculate f1
                 f1_05,loss = val.run(data_dict,
-                                           batch_size=batch_size // WORLD_SIZE * 2,
+                                           batch_size=batch_size,
                                            imgsz=imgsz,
                                            model=ema.ema,
                                            single_cls=single_cls,

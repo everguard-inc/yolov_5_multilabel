@@ -4,8 +4,11 @@
 *.png
 *.pth
 *.pt
+*.csv
 dataset_ppe_mini/
 runs/
 plateu
 test
-dataset_ppe
+dataset_ppe/
+10cl_weights
+person_in_harness_bucket

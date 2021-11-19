@@ -26,8 +26,8 @@ from utils.general import apply_classifier, check_img_size, check_imshow, check_
     strip_optimizer, xyxy2xywh
 from utils.plots import Annotator, colors
 from utils.torch_utils import load_classifier, select_device, time_sync
-from utils.metrics import predicts_to_multilabel_numpy
-
+from utils.metrics import predicts_to_multilabel_numpy, predicts_to_multilabel_numpy_custom
+from tqdm import tqdm
 
 def detection_metrics(predicts,targets):
     pass
@@ -59,10 +59,12 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
         hide_conf=False,  # hide confidences
         half=True,  # use FP16 half-precision inference
         ):
+
+    name = 'buckets'
     save_img = not nosave and not source.endswith('.txt')  # save inference images
     webcam = source.isnumeric() or source.endswith('.txt') or source.lower().startswith(
         ('rtsp://', 'rtmp://', 'http://', 'https://'))
-
+    
     # Directories
     save_dir = increment_path(Path(project) / name, exist_ok=exist_ok)  # increment run
     (save_dir / 'labels' if save_txt else save_dir).mkdir(parents=True, exist_ok=True)  # make dir
@@ -129,10 +131,7 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
     # Run inference
     if pt and device.type != 'cpu':
         model(torch.zeros(1, 3, *imgsz).to(device).type_as(next(model.parameters())))  # run once
-    time_file = open("runs/detect/time.txt", "a")
-    for path, img, im0s, vid_cap in dataset:
-        print("path")
-        print(path)
+    for path, img, im0s, vid_cap in tqdm(dataset):
         start = time.time()
         if onnx:
             img = img.astype('float32')
@@ -175,8 +174,7 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
         conf_thres_list = [0.5,0.5,0.2,0.5,0.5,0.2,0.5,0.5,0.2,0.5]
         pred = pred.detach().cpu().numpy()
         if pred.shape[0]>1:
-            print(pred)
-            pred = predicts_to_multilabel_numpy(pred,iou_thres_post,conf_thres_list)
+            pred = predicts_to_multilabel_numpy_custom(pred,iou_thres_post,conf_thres_list)
         else:
             pred = np.expand_dims(pred, 0)
         # Second-stage classifier (optional)
@@ -187,7 +185,6 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
         else:
             p, im0, frame = path, im0s.copy(), getattr(dataset, 'frame', 0)
         end = time.time()
-        time_file.write(f'{end-start}\n')
         p = Path(p)  # to Path
         save_path = str(save_dir / p.name)  # img.jpg
         txt_path = str(save_dir / 'labels' / p.stem) + ('' if dataset.mode == 'image' else f'_{frame}')  # img.txt
@@ -198,23 +195,20 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
         for i, det in enumerate(pred):  # per image
             if len(det):
                 # Rescale boxes from img_size to im0 size
+                #det = np.expand_dims(det,0)
                 s = ''
                 det = det.astype(np.float64)
-                det[:4] = scale_coords(img.shape[2:], det[:4], im0.shape).round()
-                print()
+                try:
+                    det[:4] = scale_coords(img.shape[2:], det[:4], im0.shape).round()
+                except:
+                    print(det)
                 labels = det[0,4:].astype(int)
                 # Print results
                 for c in labels:
                     s += f"{c};"  # add to string
                 # Write results
-                for *xyxy, conf, cls in reversed(det):
-                    if save_txt:  # Write to file
-                        xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-                        line = (cls, *xywh, conf) if save_conf else (cls, *xywh)  # label format
-                        with open(txt_path + '.txt', 'a') as f:
-                            f.write(('%g ' * len(line)).rstrip() % line + '\n')
-
-                    if save_img or save_crop or view_img:  # Add bbox to image
+                xyxy = det[0,:4]
+                if save_img or save_crop or view_img:  # Add bbox to image
                         #c = int(cls)  # integer class
                         #label = None if hide_labels else (names[c] if hide_conf else f'{names[c]} {conf:.2f}')
                         annotator.box_label(xyxy, s)
