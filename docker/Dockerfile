@@ -12,6 +12,7 @@ RUN python -m pip install --upgrade pip
 RUN pip uninstall -y nvidia-tensorboard nvidia-tensorboard-plugin-dlprof
 RUN pip install --no-cache -r requirements.txt coremltools onnx gsutil notebook wandb>=0.12.2
 RUN pip install --no-cache -U torch torchvision numpy
+RUN pip install filterpy
 # RUN pip install --no-cache torch==1.9.0+cu111 torchvision==0.10.0+cu111 -f https://download.pytorch.org/whl/torch_stable.html
 
 # Create working directory
@@ -19,8 +20,8 @@ RUN mkdir -p /usr/src/app
 WORKDIR /usr/src/app
 
 # Copy contents
-COPY . /usr/src/app
-
+COPY ./ /usr/src/app/
+WORKDIR /app
 # Set environment variables
 ENV HOME=/usr/src/app
 

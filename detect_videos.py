@@ -64,6 +64,7 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
         hide_labels=False,  # hide labels
         hide_conf=False,  # hide confidences
         half=True,  # use FP16 half-precision inference
+        conf_thres_list=[0.5,0.5,0.2,0.5,0.5,0.2,0.5,0.5,0.2,0.5]
         ):
     name = 'test'
     save_img = not nosave and not source.endswith('.txt')  # save inference images
@@ -75,7 +76,6 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
     # Directorieso
     save_dir = increment_path(Path(project) / name, exist_ok=exist_ok)  # increment run
     (save_dir / 'labels' if save_txt else save_dir).mkdir(parents=True, exist_ok=True)  # make dir
-
     # Initialize
     set_logging()
     device = select_device(device)
@@ -178,7 +178,6 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
             pred[..., 3] *= imgsz[0]  # h
             pred = torch.tensor(pred)
         pred = non_max_suppression(pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det)[0]
-        conf_thres_list = [0.5,0.5,0.2,0.5,0.5,0.2,0.5,0.5,0.2,0.5]
         pred = pred.detach().cpu().numpy()
         if pred.shape[0]>1:
             pred = predicts_to_multilabel_numpy(in_harness_classification_model,pred,iou_thres_post,conf_thres_list)
@@ -224,10 +223,10 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
                             save_path += '.mp4'
                         vid_writer[0] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
                     vid_writer[0].write(im0)
-        
         del clean_image
     
     # Print results
+    print(f"results saved to {save_dir}")
     if save_txt or save_img:
         s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if save_txt else ''
     if update:
@@ -262,6 +261,7 @@ def parse_opt():
     parser.add_argument('--hide-labels', default=False, action='store_true', help='hide labels')
     parser.add_argument('--hide-conf', default=False, action='store_true', help='hide confidences')
     parser.add_argument('--half', action='store_true', help='use FP16 half-precision inference')
+    parser.add_argument("--conf_thres_list", nargs="+", default=[0.5,0.5,0.2,0.5,0.5,0.2,0.5,0.5,0.2,0.5])
     opt = parser.parse_args()
     opt.imgsz *= 2 if len(opt.imgsz) == 1 else 1  # expand
     print_args(FILE.stem, opt)
