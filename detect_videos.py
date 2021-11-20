@@ -64,7 +64,8 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
         hide_labels=False,  # hide labels
         hide_conf=False,  # hide confidences
         half=True,  # use FP16 half-precision inference
-        conf_thres_list=[0.5,0.5,0.2,0.5,0.5,0.2,0.5,0.5,0.2,0.5]
+        conf_thres_list=[0.5,0.5,0.2,0.5,0.5,0.2,0.5,0.5,0.2,0.5],
+        track_buffer_size=1
         ):
     name = 'test'
     save_img = not nosave and not source.endswith('.txt')  # save inference images
@@ -141,7 +142,7 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
     
     for path, img, im0s, vid_cap, frame_number in tqdm(dataset):
         if frame_number == 1:
-            person_tracker = KFTracker(buffer_size = 3)
+            person_tracker = KFTracker(buffer_size = track_buffer_size)
         if onnx:
             img = img.astype('float32')
         else:
@@ -262,6 +263,7 @@ def parse_opt():
     parser.add_argument('--hide-conf', default=False, action='store_true', help='hide confidences')
     parser.add_argument('--half', action='store_true', help='use FP16 half-precision inference')
     parser.add_argument("--conf_thres_list", nargs="+", default=[0.5,0.5,0.2,0.5,0.5,0.2,0.5,0.5,0.2,0.5])
+    parser.add_argument('--track_buffer_size', type=int, default=1, help='track buffer size')
     opt = parser.parse_args()
     opt.imgsz *= 2 if len(opt.imgsz) == 1 else 1  # expand
     print_args(FILE.stem, opt)
