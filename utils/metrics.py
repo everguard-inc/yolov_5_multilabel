@@ -86,7 +86,7 @@ def iou_batch_numpy(bb_test, bb_gt):
 
 
 def predicts_to_multilabel_numpy(
-    model, predicts : np.ndarray, iou_th : float, conf_th_list : List, bucket_label : int = 9, not_in_harness_label : int = 1
+    predicts : np.ndarray, iou_th : float, conf_th_list : List, bucket_label : int = 9, not_in_harness_label : int = 1
     ) -> np.ndarray:
     if len(predicts) == 0:
         return []
@@ -102,9 +102,9 @@ def predicts_to_multilabel_numpy(
     infraction_predicts = predicts[(predicts[...,-1]==not_in_harness_label).nonzero()[0]].astype(int)
     predicts = predicts[(predicts[...,-1]!=bucket_label).nonzero()[0]].astype(int)
     predicts = predicts[(predicts[...,-1]!=not_in_harness_label).nonzero()[0]].astype(int)
-    person_not_in_harness = not_in_harness_check(infraction_predicts,bucket_predicts,model)
-    if len(person_not_in_harness)>0:
-        predicts = np.append(predicts,person_not_in_harness,axis=0)
+    # person_not_in_harness = not_in_harness_check(infraction_predicts,bucket_predicts,model)
+    # if len(person_not_in_harness)>0:
+    #     predicts = np.append(predicts,person_not_in_harness,axis=0)
     iou_matrix = iou_batch_numpy(predicts,predicts)
     iou_matrix = np.triu(iou_matrix,0)
     matched_indices = np.c_[(iou_matrix>iou_th).nonzero()]
