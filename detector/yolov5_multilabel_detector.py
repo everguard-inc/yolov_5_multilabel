@@ -16,8 +16,8 @@ from utils.torch_utils import load_classifier, select_device
 
 
 class Yolov5MultilabelDetector:
-    def __init__(self, config_path: str):
-        self._load_cfg(load_yaml(config_path))
+    def __init__(self, config: Dict):
+        self._load_cfg(config)
         self._load_model()
 
     def _load_cfg(self, config: Dict[str, Any]) -> NoReturn:
