@@ -118,8 +118,6 @@ class Yolov5MultilabelDetector:
         if pred.shape[0] > 1:
             pred = predicts_to_multilabel_numpy(predicts=pred, iou_th=self._iou_thres_post,
                                                 conf_th_list=self._conf_thres_list)
-        else:
-            pred = np.expand_dims(pred, 0)
 
         # Second-stage classifier (optional)
         if self._classify:
