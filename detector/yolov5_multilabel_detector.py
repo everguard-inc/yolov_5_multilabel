@@ -1,11 +1,14 @@
 # YOLOv5 🚀 by Ultralytics, GPL-3.0 license
-
+import os
+import sys
 from pathlib import Path
-from typing import Any, Dict, NoReturn, Tuple
+from typing import Any, Dict, NoReturn, Tuple, List
 
 import numpy as np
 import onnxruntime
 import torch
+
+sys.path.append(os.path.abspath(__file__ + "/../../"))
 
 from models.experimental import attempt_load
 from utils.augmentations import letterbox
@@ -88,13 +91,15 @@ class Yolov5MultilabelDetector:
 
     @staticmethod
     def _postprocess_detections(pred, initial_img_shape: Tuple, input_img_shape: Tuple):
+        if len(pred) == 0:
+            return
         coords = [bbox[:4] for bbox in pred]
-        coords = scale_coords(input_img_shape[2:], np.stack(coords)[:4].astype(np.float64), initial_img_shape).round()
+        coords = scale_coords(input_img_shape[2:], np.stack(coords).astype(np.float64), initial_img_shape).round()
         for i, bbox_coords in enumerate(coords):
             pred[i][:4] = bbox_coords
 
     @torch.no_grad()
-    def forward_image(self, img: np.ndarray) -> np.ndarray:
+    def forward_image(self, img: np.ndarray) -> List[np.ndarray]:
         # Inference
         preprocessed_img = self._preprocess(img)
         if self._pt:
