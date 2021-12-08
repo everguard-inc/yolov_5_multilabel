@@ -13,3 +13,4 @@ dataset_ppe/
 10cl_weights
 person_in_harness_bucket
 data/videos
+__pycache__
