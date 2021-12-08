@@ -192,6 +192,8 @@ def predicts_to_multilabel_numpy(predicts: np.ndarray, iou_th: float, conf_th: f
     for ids in new_matched_indices:
         new_pr = predicts[ids]
         new_pr = get_infraction_pairs(new_pr)
+        if len(new_pr)==0:
+            continue
         new_pr = np.concatenate((new_pr[0][:4], new_pr[:, 5]))
         new_predicts.append(new_pr)
     for pred in extra_predicts:
