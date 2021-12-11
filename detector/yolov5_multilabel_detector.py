@@ -37,8 +37,6 @@ class Yolov5MultilabelDetector:
         self._agnostic_nms = config["agnostic_nms"]  # class-agnostic NMS
         self._augment = config["augment"]  # augmented inference
         self._classify = config["classify"]  # False
-        self._conf_thres_list = config[
-            "conf_thres_list"]  # conf_thres_list = [0.5, 0.5, 0.2, 0.5, 0.5, 0.2, 0.5, 0.5, 0.2, 0.5]
         self._stride = config["stride"]
 
         suffixes = config["suffixes"]  # ['.pt', '.onnx']
