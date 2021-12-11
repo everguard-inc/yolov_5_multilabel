@@ -300,6 +300,15 @@ def check_yaml(file, suffix=('.yaml', '.yml')):
     return check_file(file, suffix)
 
 
+def load_yaml(path: str):
+    with open(path, "r") as stream:
+        try:
+            content = yaml.load(stream, Loader=yaml.FullLoader)
+        except yaml.YAMLError as exc:
+            print(exc)
+    return content
+
+
 def check_file(file, suffix=''):
     # Search/download file (if necessary) and return path
     check_suffix(file, suffix)  # optional

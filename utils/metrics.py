@@ -3,7 +3,9 @@
 Model validation metrics
 """
 
+from hashlib import new
 import math
+import re
 import warnings
 from pathlib import Path
 from typing import List
@@ -17,16 +19,17 @@ def fitness(x):
     w = [0.0, 0.0, 0.1, 0.9]  # weights for [P, R, mAP@0.5, mAP@0.5:0.95]
     return (x[:, :4] * w).sum(1)
 
-def calculate_metrics(predicts : torch.tensor, targets: torch.tensor):
+
+def calculate_metrics(predicts: torch.tensor, targets: torch.tensor):
     pass
 
 
-def not_in_harness_check(persons,buckets,model):
-    buckets_boxes = buckets[:,:4]
-    person_boxes = persons[:,:4]
-    iou_matrix = iou_batch_numpy(buckets_boxes,person_boxes)
-    iou_matrix = np.triu(iou_matrix,0)
-    matched_indices = np.c_[(iou_matrix>0).nonzero()]
+def not_in_harness_check(persons, buckets, model):
+    buckets_boxes = buckets[:, :4]
+    person_boxes = persons[:, :4]
+    iou_matrix = iou_batch_numpy(buckets_boxes, person_boxes)
+    iou_matrix = np.triu(iou_matrix, 0)
+    matched_indices = np.c_[(iou_matrix > 0).nonzero()]
     person_not_in_harness = []
     for matched in matched_indices:
         b_i = matched[0]
@@ -37,38 +40,38 @@ def not_in_harness_check(persons,buckets,model):
         bucket_box_height = bucket_box[3] - bucket_box[1]
         person_box_width = person_box[2] - person_box[0]
         person_box_height = person_box[3] - person_box[1]
-        bucket_box[0] =  (bucket_box[0] + bucket_box_width*0.05).astype(int)
-        bucket_box[2] =  (bucket_box[2] - bucket_box_width*0.05).astype(int)
-        bucket_area = bucket_box_width*bucket_box_height
-        person_area = person_box_width*person_box_height
-        person_centr = (person_box[0]+person_box[2])/2
-        bucket_centr = (bucket_box[0]+bucket_box[2])/2
-        bucket_person_width_union = max(bucket_box[2],person_box[2]) - min(bucket_box[0],person_box[0])
-        centr_dist_norm = abs(bucket_centr - person_centr)/bucket_person_width_union
+        bucket_box[0] = (bucket_box[0] + bucket_box_width * 0.05).astype(int)
+        bucket_box[2] = (bucket_box[2] - bucket_box_width * 0.05).astype(int)
+        bucket_area = bucket_box_width * bucket_box_height
+        person_area = person_box_width * person_box_height
+        person_centr = (person_box[0] + person_box[2]) / 2
+        bucket_centr = (bucket_box[0] + bucket_box[2]) / 2
+        bucket_person_width_union = max(bucket_box[2], person_box[2]) - min(bucket_box[0], person_box[0])
+        centr_dist_norm = abs(bucket_centr - person_centr) / bucket_person_width_union
         head_loc = 1 if person_box[1] < bucket_box[1] else 0
         legs_loc = 1 if (person_box[3] < bucket_box[3]) and \
-                    (person_box[3] > bucket_box[1]) else 0
-        iou = bbox_iou_numpy(bucket_box,person_box)
-        iom = bbox_io_mean_numpy(bucket_box,person_box)
+                        (person_box[3] > bucket_box[1]) else 0
+        iou = bbox_iou_numpy(bucket_box, person_box)
+        iom = bbox_io_mean_numpy(bucket_box, person_box)
         ['area_ratio', 'height_ratio', 'legs_loc', 'head_loc', 'iou', 'io_min',
-       'centr_x_distance_norm'],
+         'centr_x_distance_norm'],
         test = {
-        'area_ratio':float(person_area/bucket_area).__round__(2),
-        'height_ratio':float((person_box[3]-person_box[1])/(bucket_box[3]-bucket_box[1])).__round__(2),
-        'legs_loc':legs_loc,
-        'head_loc':head_loc,
-        'iou':float(iou).__round__(2),
-        'io_min':float(iom).__round__(2),
-        'centr_x_distance_norm': float(centr_dist_norm).__round__(2)
+            'area_ratio': float(person_area / bucket_area).__round__(2),
+            'height_ratio': float((person_box[3] - person_box[1]) / (bucket_box[3] - bucket_box[1])).__round__(2),
+            'legs_loc': legs_loc,
+            'head_loc': head_loc,
+            'iou': float(iou).__round__(2),
+            'io_min': float(iom).__round__(2),
+            'centr_x_distance_norm': float(centr_dist_norm).__round__(2)
         }
         prediction = model.predict([list(test.values())])[0]
-        if prediction==1:
+        if prediction == 1:
             if not any([(persons[p_i] == a_s).all() for a_s in person_not_in_harness]):
                 person_not_in_harness.append(persons[p_i])
     person_not_in_harness = np.array(person_not_in_harness)
 
     return person_not_in_harness
-        
+
 
 def iou_batch_numpy(bb_test, bb_gt):
     bb_gt = np.expand_dims(bb_gt, 0)
@@ -81,56 +84,122 @@ def iou_batch_numpy(bb_test, bb_gt):
     h = np.maximum(0, yy2 - yy1)
     wh = w * h
     iou_matrix = wh / ((bb_test[..., 2] - bb_test[..., 0]) * (bb_test[..., 3] - bb_test[..., 1])
-              + (bb_gt[..., 2] - bb_gt[..., 0]) * (bb_gt[..., 3] - bb_gt[..., 1]) - wh)
+                       + (bb_gt[..., 2] - bb_gt[..., 0]) * (bb_gt[..., 3] - bb_gt[..., 1]) - wh)
     return iou_matrix
 
 
-def predicts_to_multilabel_numpy(
-    model, predicts : np.ndarray, iou_th : float, conf_th_list : List, bucket_label : int = 9, not_in_harness_label : int = 1
-    ) -> np.ndarray:
+def predicts_to_multilabel_numpy_extra(
+        model, predicts: np.ndarray, iou_th: float, conf_th_list: List, bucket_label: int = 9,
+        not_in_harness_label: int = 1
+) -> np.ndarray:
     if len(predicts) == 0:
         return []
     filtered_predicts = []
     for pred in predicts:
         conf_th = conf_th_list[int(pred[-1])]
-        if pred[-2]>=conf_th:
+        if pred[-2] >= conf_th:
             filtered_predicts.append(pred)
     predicts = np.array(filtered_predicts).astype(int)
     if len(predicts) == 0:
         return []
-    bucket_predicts = predicts[(predicts[...,-1]==bucket_label).nonzero()[0]].astype(int)
-    infraction_predicts = predicts[(predicts[...,-1]==not_in_harness_label).nonzero()[0]].astype(int)
-    predicts = predicts[(predicts[...,-1]!=bucket_label).nonzero()[0]].astype(int)
-    predicts = predicts[(predicts[...,-1]!=not_in_harness_label).nonzero()[0]].astype(int)
-    person_not_in_harness = not_in_harness_check(infraction_predicts,bucket_predicts,model)
-    if len(person_not_in_harness)>0:
-        predicts = np.append(predicts,person_not_in_harness,axis=0)
-    iou_matrix = iou_batch_numpy(predicts,predicts)
-    iou_matrix = np.triu(iou_matrix,0)
-    matched_indices = np.c_[(iou_matrix>iou_th).nonzero()]
+    bucket_predicts = predicts[(predicts[..., -1] == bucket_label).nonzero()[0]].astype(int)
+    infraction_predicts = predicts[(predicts[..., -1] == not_in_harness_label).nonzero()[0]].astype(int)
+    predicts = predicts[(predicts[..., -1] != bucket_label).nonzero()[0]].astype(int)
+    predicts = predicts[(predicts[..., -1] != not_in_harness_label).nonzero()[0]].astype(int)
+    person_not_in_harness = not_in_harness_check(infraction_predicts, bucket_predicts, model)
+    if len(person_not_in_harness) > 0:
+        predicts = np.append(predicts, person_not_in_harness, axis=0)
+    iou_matrix = iou_batch_numpy(predicts, predicts)
+    iou_matrix = np.triu(iou_matrix, 0)
+    matched_indices = np.c_[(iou_matrix > iou_th).nonzero()]
     new_matched_indices = []
     for ids in range(len(matched_indices)):
-        if len(new_matched_indices)==0:
+        if len(new_matched_indices) == 0:
             new_matched_indices.append(list(set(matched_indices[ids])))
         else:
             exist_flag = False
             for exist_index, exist_el in enumerate(new_matched_indices):
                 if matched_indices[ids][0] in exist_el or matched_indices[ids][1] in exist_el:
-                    new_unique = list(set(exist_el+list(matched_indices[ids])))
+                    new_unique = list(set(exist_el + list(matched_indices[ids])))
                     new_matched_indices[exist_index] = new_unique
                     exist_flag = True
-                    break  
+                    break
             if not exist_flag:
                 new_matched_indices.append(list(set(matched_indices[ids])))
     new_predicts = []
     for ids in new_matched_indices:
         new_pr = predicts[ids]
-        new_pr = np.concatenate((new_pr[0][:4],new_pr[:,5]))
+        new_pr = np.concatenate((new_pr[0][:4], new_pr[:, 5]))
         new_predicts.append(np.array(new_pr))
     for pred in bucket_predicts:
         temp = []
-        for i,el in enumerate(pred):
-            if i!=4:
+        for i, el in enumerate(pred):
+            if i != 4:
+                temp.append(el)
+        new_predicts.append(np.array(temp))
+    return new_predicts
+
+
+def get_infraction_pairs(predicts: np.ndarray, pairs_list: List[List] = [[0, 1], [3, 4], [6, 7], [10, 11]]):
+    new_predicts = []
+    for pair in pairs_list:
+        indexes = np.argwhere((predicts[:, -1] == pair[0]) | (predicts[:, -1] == pair[1]))
+        new_pair = predicts[indexes].squeeze()
+        if len(new_pair.shape) == 2 and len(new_pair) > 0:
+            new_pair = new_pair[np.argmax(new_pair[:, 4])]
+        if len(new_pair) > 0:
+            new_predicts.append(new_pair)
+
+    return np.array(new_predicts)
+
+
+def predicts_to_multilabel_numpy(predicts: np.ndarray, iou_th: float, conf_th: float, skip_label: int = 9,
+                                 buckets_conf_th: float = 0.35) -> np.ndarray:
+    if len(predicts) == 0:
+        return []
+    filtered_predicts = []
+    for pred in predicts:
+        if pred[-2] >= conf_th:
+            filtered_predicts.append(pred)
+    predicts = np.array(filtered_predicts)
+    if len(predicts) == 0:
+        return []
+    extra_predicts = predicts[(predicts[..., -1] == skip_label).nonzero()[0]]
+    extra_predicts_filtered = []
+    for pred in extra_predicts:
+        if pred[-2] >= buckets_conf_th:
+            extra_predicts_filtered.append(pred)
+    extra_predicts = np.array(extra_predicts_filtered)
+    predicts = predicts[(predicts[..., -1] != skip_label).nonzero()[0]]
+    iou_matrix = iou_batch_numpy(predicts, predicts)
+    iou_matrix = np.triu(iou_matrix, 0)
+    matched_indices = np.c_[(iou_matrix > iou_th).nonzero()]
+    new_matched_indices = []
+    for ids in range(len(matched_indices)):
+        if len(new_matched_indices) == 0:
+            new_matched_indices.append(list(set(matched_indices[ids])))
+        else:
+            exist_flag = False
+            for exist_index, exist_el in enumerate(new_matched_indices):
+                if matched_indices[ids][0] in exist_el or matched_indices[ids][1] in exist_el:
+                    new_unique = list(set(exist_el + list(matched_indices[ids])))
+                    new_matched_indices[exist_index] = new_unique
+                    exist_flag = True
+                    break
+            if not exist_flag:
+                new_matched_indices.append(list(set(matched_indices[ids])))
+    new_predicts = []
+    for ids in new_matched_indices:
+        new_pr = predicts[ids]
+        new_pr = get_infraction_pairs(new_pr)
+        if len(new_pr)==0:
+            continue
+        new_pr = np.concatenate((new_pr[0][:4], new_pr[:, 5]))
+        new_predicts.append(new_pr)
+    for pred in extra_predicts:
+        temp = []
+        for i, el in enumerate(pred):
+            if i != 4:
                 temp.append(el)
         new_predicts.append(np.array(temp))
     return new_predicts
@@ -160,6 +229,7 @@ def bbox_iou_numpy(bb1, bb2):
     assert iou <= 1.0
     return iou
 
+
 def bbox_io_mean_numpy(bb1, bb2):
     assert bb1[0] < bb1[2]
     assert bb1[1] < bb1[3]
@@ -179,21 +249,22 @@ def bbox_io_mean_numpy(bb1, bb2):
     bb1_area = (bb1[2] - bb1[0]) * (bb1[3] - bb1[1])
     bb2_area = (bb2[2] - bb2[0]) * (bb2[3] - bb2[1])
 
-    iom = intersection_area / min(bb1_area,bb2_area)
+    iom = intersection_area / min(bb1_area, bb2_area)
     assert iom >= 0.0
     assert iom <= 1.0
     return iom
 
-def get_metrics_per_class(predicts,targets,iou_th,metrics):
+
+def get_metrics_per_class(predicts, targets, iou_th, metrics):
     for predict in predicts:
         predicted_label = int(predict[-1])
         predicted_box = predict[:4]
         if len(targets) == 0:
-            metrics[predicted_label]['fp']+=1
+            metrics[predicted_label]['fp'] += 1
         else:
-            iou_all = np.array([bbox_iou_numpy(target[-4:],predicted_box) for target in targets])
+            iou_all = np.array([bbox_iou_numpy(target[-4:], predicted_box) for target in targets])
             if (iou_all >= iou_th).any():
-                matched_targets_index = np.where(iou_all>=iou_th)[0]
+                matched_targets_index = np.where(iou_all >= iou_th)[0]
                 matched_targets = targets[matched_targets_index]
                 all_matched_labels = []
                 for target in matched_targets:
@@ -201,46 +272,48 @@ def get_metrics_per_class(predicts,targets,iou_th,metrics):
                     for label in target_labels:
                         all_matched_labels.append(label)
                 if predicted_label in all_matched_labels:
-                    metrics[predicted_label]['tp']+=1
+                    metrics[predicted_label]['tp'] += 1
                 else:
-                    metrics[predicted_label]['fn']+=1
-                    metrics[predicted_label]['fp']+=1
+                    metrics[predicted_label]['fn'] += 1
+                    metrics[predicted_label]['fp'] += 1
             else:
-                metrics[predicted_label]['fn']+=1
+                metrics[predicted_label]['fn'] += 1
     return metrics
 
-def get_metrics(out,targets,metrics,iou_th,conf_th_list):
+
+def get_metrics(out, targets, metrics, iou_th, conf_th_list):
     for index, predicts in enumerate(out):
         predicts = predicts.detach().cpu().numpy()
         filtered_predicts = []
         for pred in predicts:
             conf_th = conf_th_list[int(pred[-1])]
-            if pred[-2]>=conf_th:
+            if pred[-2] >= conf_th:
                 filtered_predicts.append(pred)
         temp_predicts = np.array(filtered_predicts).astype(int)
-        temp_targets = targets[(targets[...,0]==index).nonzero()[0]].astype(int)
-        if len(temp_predicts)==0:
+        temp_targets = targets[(targets[..., 0] == index).nonzero()[0]].astype(int)
+        if len(temp_predicts) == 0:
             all_target_labels = []
             for target in temp_targets:
-                    target_labels = decode_labels(target[1:-4])
-                    for label in target_labels:
-                        all_target_labels.append(label)
-            all_target_labels = list(set(all_target_labels))    
+                target_labels = decode_labels(target[1:-4])
+                for label in target_labels:
+                    all_target_labels.append(label)
+            all_target_labels = list(set(all_target_labels))
             for label in all_target_labels:
-                metrics[label]['fn']+=1
+                metrics[label]['fn'] += 1
         else:
-            metrics = get_metrics_per_class(temp_predicts,temp_targets,iou_th,metrics)
+            metrics = get_metrics_per_class(temp_predicts, temp_targets, iou_th, metrics)
     return metrics
 
 
 def decode_labels(labels):
     labels_cat = []
-    for i,label in enumerate(labels):
-        if label==1:
+    for i, label in enumerate(labels):
+        if label == 1:
             labels_cat.append(i)
     return labels_cat
 
-def encode_labels(labels,num_classes):
+
+def encode_labels(labels, num_classes):
     encode_labels = np.zeros((num_classes))
     for label in labels:
         label = int(label)
@@ -267,7 +340,7 @@ def ap_per_class(tp, conf, pred_cls, target_cls, plot=False, save_dir='.', names
 
     # Find unique classes
     unique_classes = np.unique(target_cls)
-    nc = unique_classes.shape[0]  #number of classes, number of detections
+    nc = unique_classes.shape[0]  # number of classes, number of detections
 
     # Create Precision-Recall curve and compute AP for each class
     px, py = np.linspace(0, 1, 1000), []  # for plotting
