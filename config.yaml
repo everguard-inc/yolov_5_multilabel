@@ -1,4 +1,4 @@
-weights: models/checkpoints/yolov5_multilabel_736_736_15_11_21.pt
+weights: /home/au/models/checkpoints/yolov5_multilabel_736_736_15_11_21.pt
 device: 0 # cuda device, i.e. 0 or 0,1,2,3 or cpu
 input_size: [736, 736] # inference size h,w
 nms_conf_thres: 0.01  # confidence threshold
@@ -13,3 +13,88 @@ classify: False  # False
 conf_thres_list:  [0.5, 0.5, 0.2, 0.5, 0.5, 0.2, 0.5, 0.5, 0.2, 0.5]
 suffixes: ['.pt', '.onnx']
 stride: 32
+
+yolo_to_coco:
+    0: 0 #in_harness
+    1: 1 #not_in_harness
+    2: 2 #harness_unrecognized
+    3: 0 #in_vest
+    4: 1 #not_in_vest
+    5: 2 #vest_unrecognized
+    6: 0 #in_hardhat
+    7: 1 #not_in_hardhat
+    8: 2 #hardhat_unrecognized
+    9: 0 #crane_bucket
+    10: 0 #person_in_bucket
+    11: 1 #person_not_in_bucket
+
+yolo_ids:
+    harness:
+        - 0
+        - 1
+        - 2
+    vest: 
+        - 3
+        - 4
+        - 5
+    hardhat:
+        - 6 
+        - 7
+        - 8
+
+labels:
+  class_names_mapping:
+    - 0: in_harness
+      1: not_in_harness
+      2: harness_unrecognized
+    - 0: in_vest
+      1: not_in_vest
+      2: vest_unrecognized
+    - 0: in_hardhat
+      1: not_in_hardhat
+      2: hardhat_unrecognized
+  class_ids:
+    in_harness: 1
+    not_in_harness: 2
+    harness_unrecognized: 3
+    in_vest: 1
+    not_in_vest: 2
+    vest_unrecognized: 3
+    in_hardhat: 1
+    not_in_hardhat: 2
+    hardhat_unrecognized: 3
+  categories:
+    harness:
+      - supercategory: person
+        name: in_harness
+        id: 1
+      - supercategory: person
+        name: not_in_harness
+        id: 2
+      - supercategory: person
+        name: harness_unrecognized
+        id: 3
+    vest:
+      - supercategory: person
+        name: in_vest
+        id: 1
+      - supercategory: person
+        name: not_in_vest
+        id: 2
+      - supercategory: person
+        name: vest_unrecognized
+        id: 3
+    hardhat:
+      - supercategory: person
+        name: in_hardhat
+        id: 1
+      - supercategory: person
+        name: not_in_hardhat
+        id: 2
+      - supercategory: person
+        name: hardhat_unrecognized
+        id: 3
+  label_groups:
+    - harness
+    - vest
+    - hardhat
