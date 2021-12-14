@@ -38,15 +38,12 @@ class Yolov5MultilabelDetector:
         self._augment = config["augment"]  # augmented inference
         self._classify = config["classify"]  # False
         self._stride = config["stride"]
-        
-        self._yolo_to_coco_id_mapping = config["yolo_to_coco"]
-        self._yolo_ids = config["yolo_ids"]
 
         suffixes = config["suffixes"]  # ['.pt', '.onnx']
         suffix = Path(self._weights).suffix.lower()
         check_suffix(self._weights, suffixes)  # check weights have acceptable suffix
         self._pt, self._onnx = (suffix == x for x in suffixes)  # backend booleans
-        
+
         if not any([self._pt, self._onnx]):
             raise RuntimeError(f"Model weights with unsupported extension received: {self._weights}")
 
@@ -99,32 +96,6 @@ class Yolov5MultilabelDetector:
         for i, bbox_coords in enumerate(coords):
             pred[i][:4] = bbox_coords
 
-    def _yolo_to_coco(self, preds: list, default_score: float = 1):
-            res = list()
-            
-            for pred in preds:
-                dct = {'bbox': pred[:4], 'labels': pred[4:]}
-                dct['bbox'] = np.append(dct['bbox'], np.array([default_score]).astype(np.float32))
-
-                labels=set(dct['labels'])
-
-                yolo_harness_labels = list(set(self._yolo_ids['harness']).intersection(labels))
-                yolo_harness_label = self._yolo_to_coco_id_mapping[yolo_harness_labels[0]] if len(yolo_harness_labels) > 0 else 2
-
-                yolo_vest_labels = list(set(self._yolo_ids['vest']).intersection(labels))
-                yolo_vest_label = self._yolo_to_coco_id_mapping[yolo_vest_labels[0]] if len(yolo_vest_labels) > 0 else 2
-
-                yolo_hardhat_labels = list(set(self._yolo_ids['hardhat']).intersection(labels))
-                yolo_hardhat_label = self._yolo_to_coco_id_mapping[yolo_hardhat_labels[0]] if len(yolo_hardhat_labels) > 0 else 2
-
-                dct['labels'] = [yolo_harness_label, yolo_vest_label, yolo_hardhat_label]
-                dct['bbox'] = dct['bbox'].astype(float)
-
-                res.append(dct)  
-
-            return res
-
-
     @torch.no_grad()
     def forward_image(self, img: np.ndarray) -> List[np.ndarray]:
         # Inference
@@ -154,8 +125,6 @@ class Yolov5MultilabelDetector:
             initial_img_shape=img.shape,
             input_img_shape=preprocessed_img.detach().cpu().numpy().shape
         )
-
-        pred = self._yolo_to_coco(preds=pred)
 
         return pred
 

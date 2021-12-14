@@ -15,6 +15,6 @@ def run_inference(config_path: str, img_dir: str):
 
 if __name__ == "__main__":
     run_inference(
-        config_path='/home/au/yolov_5_multilabel/config.yaml',
+        config_path='config.yaml',
         img_dir='/media/data/vv/tasks/2021-12-07_debug_yolov5/img'
     )
