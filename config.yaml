@@ -28,3 +28,18 @@ yolo_to_coco:
     9: 0 #crane_bucket
     10: 0 #person_in_bucket
     11: 1 #person_not_in_bucket
+
+yolo_ids:
+    harness:
+        - 0
+        - 1
+        - 2
+    vest:
+        - 3
+        - 4
+        - 5
+    hardhat:
+        - 6
+        - 7
+        - 8
+
