@@ -39,7 +39,7 @@ class Yolov5MultilabelDetector:
         self._classify = config["classify"]  # False
         self._stride = config["stride"]
 
-        self._yolo_to_coco = config["yolo_to_coco"]
+        self._yolo_to_coco_ids_mapping = config["yolo_to_coco"]
         self._yolo_ids = config["yolo_ids"]
 
         suffixes = config["suffixes"]  # ['.pt', '.onnx']
@@ -99,7 +99,7 @@ class Yolov5MultilabelDetector:
         for i, bbox_coords in enumerate(coords):
             pred[i][:4] = bbox_coords
 
-    def yolo_to_dict(self, preds: np.array) -> List[dict]:
+    def convert_yolo_predictions_to_universal_format(self, preds: np.array) -> List[dict]:
         res = list()
         for pred in preds:
             dct = {'bbox': pred[:4], 'labels': pred[4:]}
@@ -108,13 +108,13 @@ class Yolov5MultilabelDetector:
             labels=set(dct['labels'])
 
             yolo_harness_labels = list(set(self._yolo_ids['harness']).intersection(labels))
-            yolo_harness_label = self._yolo_to_coco[yolo_harness_labels[0]] if len(yolo_harness_labels) > 0 else 2
+            yolo_harness_label = self._yolo_to_coco_ids_mapping[yolo_harness_labels[0]] if len(yolo_harness_labels) > 0 else 2
 
             yolo_vest_labels = list(self._yolo_ids['vest'])
-            yolo_vest_label = self._yolo_to_coco[yolo_vest_labels[0]] if len(yolo_vest_labels) > 0 else 2
+            yolo_vest_label = self._yolo_to_coco_ids_mapping[yolo_vest_labels[0]] if len(yolo_vest_labels) > 0 else 2
 
             yolo_hardhat_labels = list(self._yolo_ids['hardhat'])
-            yolo_hardhat_label = self._yolo_to_coco[yolo_hardhat_labels[0]] if len(yolo_hardhat_labels) > 0 else 2
+            yolo_hardhat_label = self._yolo_to_coco_ids_mapping[yolo_hardhat_labels[0]] if len(yolo_hardhat_labels) > 0 else 2
 
             dct['labels'] = [yolo_harness_label, yolo_vest_label, yolo_hardhat_label]
             dct['bbox'] = dct['bbox'].astype(float)
@@ -154,7 +154,7 @@ class Yolov5MultilabelDetector:
             input_img_shape=preprocessed_img.detach().cpu().numpy().shape
         )
 
-        pred = self.yolo_to_dict(pred)
+        pred = self.convert_yolo_predictions_to_universal_format(pred)
 
         return pred
 
