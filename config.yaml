@@ -15,7 +15,7 @@ suffixes: ['.pt', '.onnx']
 stride: 32
 
 
-yolo_to_coco:
+yolo_to_coco_ids_mapping:
     0: 0 #in_harness
     1: 1 #not_in_harness
     2: 2 #harness_unrecognized
