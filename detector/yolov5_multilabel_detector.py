@@ -39,7 +39,7 @@ class Yolov5MultilabelDetector:
         self._classify = config["classify"]  # False
         self._stride = config["stride"]
 
-        self._yolo_to_coco_ids_mapping = config["yolo_to_coco"]
+        self._yolo_to_coco_ids_mapping = config["yolo_to_coco_ids_mapping"]
         self._yolo_ids = config["yolo_ids"]
 
         suffixes = config["suffixes"]  # ['.pt', '.onnx']
