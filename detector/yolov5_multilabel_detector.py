@@ -110,10 +110,10 @@ class Yolov5MultilabelDetector:
             yolo_harness_labels = list(set(self._yolo_ids['harness']).intersection(labels))
             yolo_harness_label = self._yolo_to_coco_ids_mapping[yolo_harness_labels[0]] if len(yolo_harness_labels) > 0 else 2
 
-            yolo_vest_labels = list(self._yolo_ids['vest'])
+            yolo_vest_labels = list(set(self._yolo_ids['vest']).intersection(labels))
             yolo_vest_label = self._yolo_to_coco_ids_mapping[yolo_vest_labels[0]] if len(yolo_vest_labels) > 0 else 2
 
-            yolo_hardhat_labels = list(self._yolo_ids['hardhat'])
+            yolo_hardhat_labels = list(set(self._yolo_ids['hardhat']).intersection(labels))
             yolo_hardhat_label = self._yolo_to_coco_ids_mapping[yolo_hardhat_labels[0]] if len(yolo_hardhat_labels) > 0 else 2
 
             dct['labels'] = [yolo_harness_label, yolo_vest_label, yolo_hardhat_label]
