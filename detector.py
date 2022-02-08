@@ -76,9 +76,6 @@ class Yolov5MultilabelDetector:
 
     @staticmethod
     def _postprocess_detections(pred, im, im0s):
-        """
-        returns [[cls, x, y, w, h, conf], ...]
-        """
         detections = list()
         for i, det in enumerate(pred):
             result = list()
