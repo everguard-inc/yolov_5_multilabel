@@ -34,6 +34,7 @@ class Yolov5MultilabelDetector:
         self._augment = config["augment"]  # augmented inference
         self._classify = config["classify"]  # False
         self._stride = config["stride"]
+        self._auto_letterbox = config["auto_letterbox"]
 
     def _load_model(self) -> NoReturn:
         # Load model
@@ -58,7 +59,7 @@ class Yolov5MultilabelDetector:
         """
 
         # Padded resize
-        img = letterbox(img0, self._input_size, stride=self._stride, auto=True)[0]
+        img = letterbox(img0, self._input_size, stride=self._stride, auto=self._auto_letterbox)[0]
 
         # Convert
         img = img.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB
