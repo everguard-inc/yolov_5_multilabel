@@ -1,10 +1,14 @@
 # YOLOv5 🚀 by Ultralytics, GPL-3.0 license
+import json
 import os
 import sys
 from typing import Any, Dict, NoReturn, Tuple, List
+import cv2
 
 import numpy as np
 import torch
+from tqdm import tqdm
+import yaml
 
 sys.path.append(os.path.abspath(__file__ + "/.."))
 
@@ -12,6 +16,11 @@ from models.common import DetectMultiBackend
 from utils.general import non_max_suppression, scale_coords
 from utils.torch_utils import select_device
 from utils.augmentations import letterbox
+
+def load_yaml(path: str):
+    with open(path, "r") as stream:
+        content = yaml.load(stream, Loader=yaml.FullLoader)
+    return content
 
 
 class Yolov5MultilabelDetector:
@@ -84,7 +93,7 @@ class Yolov5MultilabelDetector:
                 # Rescale boxes from img_size to im0 size
                 det[:, :4] = scale_coords(im.shape[2:], det[:, :4], im0s.shape).round()
 
-                for *xyxy, conf, cls in reversed(det.cpu().numpy()):
+                for *xyxy, conf, cls in reversed(det.cpu().numpy().tolist()):
                     
                     x1, y1, x2, y2 = xyxy
                     result.append([
@@ -119,3 +128,90 @@ class Yolov5MultilabelDetector:
 
         return pred
 
+
+def get_frames_with_bboxes_from_video(
+    videos_dir,
+    video_name,
+    capturing_frequency,
+    output_img_dir,
+    output_predictions_dir,
+    digits_num,
+    detector,
+    min_predictions_on_image
+):  
+    video_base_name, ext = os.path.splitext(video_name)
+    video_path = os.path.join(videos_dir, video_name)
+
+    print(f"Getting frames from video {video_path}")
+    capture = cv2.VideoCapture(cv2.samples.findFileOrKeep(video_path))
+
+    if not capture.isOpened:
+        print(f"Unable to open: {video_path}")
+        return
+
+    counter = 0
+    while True:
+
+        counter += 1
+        
+        ret, frame = capture.read()
+        
+        if not ret:
+            break
+
+        if counter % capturing_frequency == 0:
+            img_base_name = f"{video_base_name}_frame_{str.zfill(str(counter), digits_num)}"
+            img_path = os.path.join(output_img_dir, f"{img_base_name}.jpg")
+            prediction_path = os.path.join(output_predictions_dir, f"{img_base_name}.json")
+
+            predictions = detector.forward_image(frame)
+            
+            if len(predictions) > min_predictions_on_image:
+                # save ann
+                with open(prediction_path, 'w') as json_file:
+                    json.dump(predictions, json_file)
+                    
+                # save img
+                cv2.imwrite(img_path, frame)
+
+
+def detect_videos_and_save_img_only_with_detections(
+        videos_dir,
+        output_img_dir,
+        predictions_dir,
+        capturing_frequency,
+        digits_num,
+        min_predictions_on_image
+):
+    """Saves images with predictions only if they have bboxes
+    """
+    os.makedirs(output_img_dir, exist_ok=True)
+    os.makedirs(predictions_dir, exist_ok=True)
+    
+    detector = Yolov5MultilabelDetector(config=load_yaml('config.yaml'))
+    
+    for video_index, video_name in tqdm(enumerate(sorted(list(os.listdir(videos_dir))))):
+        try:
+            get_frames_with_bboxes_from_video(
+                videos_dir=videos_dir,
+                video_name=video_name,
+                capturing_frequency=capturing_frequency,
+                output_img_dir=output_img_dir,
+                output_predictions_dir=predictions_dir,
+                digits_num=digits_num,
+                detector=detector,
+                min_predictions_on_image=min_predictions_on_image
+            )
+        except Exception as e:
+            print('Esception occured', e)
+                
+                
+if __name__ == "__main__":
+    detect_videos_and_save_img_only_with_detections(
+            videos_dir='/home/eg/volodymyr_vydrin/workspace/2022_03_28_prepare_youtube_impalement/videos',
+            output_img_dir='/home/eg/volodymyr_vydrin/workspace/2022_03_28_prepare_youtube_impalement/img',
+            predictions_dir='/home/eg/volodymyr_vydrin/workspace/2022_03_28_prepare_youtube_impalement/predictions',
+            capturing_frequency=30,
+            digits_num=7,
+            min_predictions_on_image=1
+    )
