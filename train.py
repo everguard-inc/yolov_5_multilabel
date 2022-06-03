@@ -56,6 +56,7 @@ from utils.loss import ComputeLoss
 from utils.metrics import fitness
 from utils.plots import plot_evolve, plot_labels
 from utils.torch_utils import EarlyStopping, ModelEMA, de_parallel, select_device, torch_distributed_zero_first
+import neptune.new as neptune
 
 LOCAL_RANK = int(os.getenv('LOCAL_RANK', -1))  # https://pytorch.org/docs/stable/elastic/run.html
 RANK = int(os.getenv('RANK', -1))
@@ -70,7 +71,14 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     save_dir, epochs, batch_size, weights, single_cls, evolve, data, cfg, resume, noval, nosave, workers, freeze = \
         Path(opt.save_dir), opt.epochs, opt.batch_size, opt.weights, opt.single_cls, opt.evolve, opt.data, opt.cfg, \
         opt.resume, opt.noval, opt.nosave, opt.workers, opt.freeze
+    
+    neptune_run = neptune.init(
+        project="volodymyr.vydrin/YOLOV5",
+        api_token="eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiJjYzVhYjQ3YS0yYmZjLTQ1MDctOWYwMC04NTJlODY4Y2EzMDcifQ==",
+    )  
 
+    neptune_run["opt"] = vars(opt)
+    
     # Directories
     w = save_dir / 'weights'  # weights dir
     (w.parent if evolve else w).mkdir(parents=True, exist_ok=True)  # make dir
@@ -81,6 +89,8 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
         with open(hyp, errors='ignore') as f:
             hyp = yaml.safe_load(f)  # load hyps dict
     LOGGER.info(colorstr('hyperparameters: ') + ', '.join(f'{k}={v}' for k, v in hyp.items()))
+
+    neptune_run["hyp"] = hyp
 
     # Save run settings
     if not evolve:
@@ -113,6 +123,9 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     names = ['item'] if single_cls and len(data_dict['names']) != 1 else data_dict['names']  # class names
     assert len(names) == nc, f'{len(names)} names found for nc={nc} dataset in {data}'  # check
     is_coco = isinstance(val_path, str) and val_path.endswith('coco/val2017.txt')  # COCO dataset
+
+    neptune_run["class_names"] = names
+    neptune_run["class_number"] = nc
 
     # Model
     check_suffix(weights, '.pt')  # check weights
@@ -384,6 +397,13 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             log_vals = list(mloss) + list(results) + lr
             callbacks.run('on_fit_epoch_end', log_vals, epoch, best_fitness, fi)
 
+
+            neptune_run["P"].log(results[0])
+            neptune_run["R"].log(results[1])
+            neptune_run["mAP@.5"].log(results[2])
+            neptune_run["mAP@.5-.95"].log(results[3])
+            neptune_run['lr'].log(optimizer.param_groups[0]["lr"])
+            
             # Save model
             if (not nosave) or (final_epoch and not evolve):  # if save
                 ckpt = {'epoch': epoch,
@@ -447,6 +467,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
         LOGGER.info(f"Results saved to {colorstr('bold', save_dir)}")
 
     torch.cuda.empty_cache()
+    neptune_run.stop()
     return results
 
 
