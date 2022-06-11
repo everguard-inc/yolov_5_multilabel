@@ -175,6 +175,25 @@ def get_frames_with_bboxes_from_video(
                 # save img
                 cv2.imwrite(img_path, frame)
 
+def detect_images_and_save_predictions(
+    img_dir,
+    predictions_dir,
+    detector,
+    min_predictions_on_image = 0,
+):
+    os.makedirs(predictions_dir, exist_ok=True)
+
+    for img_name in tqdm(os.listdir(img_dir)):
+        img_path = os.path.join(img_dir, img_name)
+        img_base_name = os.path.splitext(img_name)[0]
+        prediction_path = os.path.join(predictions_dir, f"{img_base_name}.json")
+
+        predictions = detector.forward_image(cv2.imread(img_path))
+
+        if len(predictions) >= min_predictions_on_image:
+            # save ann
+            with open(prediction_path, 'w') as json_file:
+                json.dump(predictions, json_file)
 
 def run_inference(
     img_dir,
