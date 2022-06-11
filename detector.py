@@ -1,4 +1,5 @@
 # YOLOv5 🚀 by Ultralytics, GPL-3.0 license
+import argparse
 import json
 import os
 import sys
@@ -175,43 +176,52 @@ def get_frames_with_bboxes_from_video(
                 cv2.imwrite(img_path, frame)
 
 
-def detect_videos_and_save_img_only_with_detections(
-        videos_dir,
-        output_img_dir,
-        predictions_dir,
-        capturing_frequency,
-        digits_num,
-        min_predictions_on_image
+def run_inference(
+    img_dir,
+    predictions_dir,
+    input_size = None, # inference size h,w
+    weights = None,
+    conf_threshold = None,
 ):
-    """Saves images with predictions only if they have bboxes
-    """
-    os.makedirs(output_img_dir, exist_ok=True)
     os.makedirs(predictions_dir, exist_ok=True)
     
-    detector = Yolov5MultilabelDetector(config=load_yaml('config.yaml'))
+    config=load_yaml('config.yaml')
     
-    for video_index, video_name in tqdm(enumerate(sorted(list(os.listdir(videos_dir))))):
-        try:
-            get_frames_with_bboxes_from_video(
-                videos_dir=videos_dir,
-                video_name=video_name,
-                capturing_frequency=capturing_frequency,
-                output_img_dir=output_img_dir,
-                output_predictions_dir=predictions_dir,
-                digits_num=digits_num,
-                detector=detector,
-                min_predictions_on_image=min_predictions_on_image
-            )
-        except Exception as e:
-            print('Esception occured', e)
+    if weights is not None:
+        config['weights'] = weights
+    if input_size is not None:
+        config['input_size'] = input_size
+    if conf_threshold is not None:
+        config['nms_conf_thres'] = conf_threshold
+        
+    detector = Yolov5MultilabelDetector()
+    
+    for img_name in os.lisrdir(img_dir):
+        
+        img_base_name = os.path.splitext(img_name)[0]
+        img_path = os.path.join(img_dir, img_name)
+        prediction_path = os.path.join(predictions_dir, f'{img_base_name}.json')
+        
+        img = cv2.imread(img_path)
+        prediction = detector.forward_image(img)
+        
+        with open(prediction_path, 'w') as json_file:
+            json.dump(prediction, json_file)
                 
                 
 if __name__ == "__main__":
-    detect_videos_and_save_img_only_with_detections(
-            videos_dir='/home/eg/volodymyr_vydrin/workspace/2022_03_28_prepare_youtube_impalement/videos',
-            output_img_dir='/home/eg/volodymyr_vydrin/workspace/2022_03_28_prepare_youtube_impalement/img',
-            predictions_dir='/home/eg/volodymyr_vydrin/workspace/2022_03_28_prepare_youtube_impalement/predictions',
-            capturing_frequency=30,
-            digits_num=7,
-            min_predictions_on_image=1
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--img_dir", type=str, required=True)
+    parser.add_argument("--predictions_dir", type=str, required=True)
+    parser.add_argument("--input_size", nargs='+', type=int, help='inference size h,w')
+    parser.add_argument("--weights", type=str)
+    parser.add_argument("--tr", type=float)
+    args = parser.parse_args()
+    
+    run_inference(
+        img_dir=args.img_dir,
+        predictions_dir=args.predictions,
+        input_size=args.input_size, # inference size h,w
+        weights=args.weights,
+        conf_threshold=args.tr,
     )
