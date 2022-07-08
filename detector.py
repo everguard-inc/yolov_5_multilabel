@@ -204,7 +204,7 @@ def run_inference(
 ):
     os.makedirs(predictions_dir, exist_ok=True)
     
-    config=load_yaml('config.yaml')
+    config=load_yaml('./config.yaml')
     
     if weights is not None:
         config['weights'] = weights
@@ -213,9 +213,9 @@ def run_inference(
     if conf_threshold is not None:
         config['nms_conf_thres'] = conf_threshold
         
-    detector = Yolov5MultilabelDetector()
+    detector = Yolov5MultilabelDetector(config)
     
-    for img_name in os.lisrdir(img_dir):
+    for img_name in tqdm(os.listdir(img_dir)):
         
         img_base_name = os.path.splitext(img_name)[0]
         img_path = os.path.join(img_dir, img_name)
@@ -239,7 +239,7 @@ if __name__ == "__main__":
     
     run_inference(
         img_dir=args.img_dir,
-        predictions_dir=args.predictions,
+        predictions_dir=args.predictions_dir,
         input_size=args.input_size, # inference size h,w
         weights=args.weights,
         conf_threshold=args.tr,
