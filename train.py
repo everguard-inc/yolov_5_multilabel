@@ -88,10 +88,10 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 
     # Save Neptune run id
 
-    Neptune_run_id_output_path = os.path.join(save_dir,'Neptune_run_id.json')
+    neptune_run_id_output_path = os.path.join(save_dir,'neptune_run_id.json')
 
-    with open(Neptune_run_id_output_path, 'w') as f:
-        json.dump({'Neptune_run_id': run_id}, f)
+    with open(neptune_run_id_output_path, 'w') as f:
+        json.dump({'neptune_run_id': run_id}, f)
 
     # Hyperparameters
     if isinstance(hyp, str):
