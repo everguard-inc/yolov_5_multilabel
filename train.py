@@ -22,6 +22,7 @@ from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 
+import json
 import numpy as np
 import torch
 import torch.distributed as dist
@@ -78,11 +79,19 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     )  
 
     neptune_run["opt"] = vars(opt)
-    
+    run_id = neptune_run._short_id
+
     # Directories
     w = save_dir / 'weights'  # weights dir
     (w.parent if evolve else w).mkdir(parents=True, exist_ok=True)  # make dir
     last, best = w / 'last.pt', w / 'best.pt'
+
+    # Save Neptune run id
+
+    neptune_run_id_output_path = os.path.join(save_dir,'neptune_run_id.json')
+
+    with open(neptune_run_id_output_path, 'w') as f:
+        json.dump({'neptune_run_id': run_id}, f)
 
     # Hyperparameters
     if isinstance(hyp, str):
