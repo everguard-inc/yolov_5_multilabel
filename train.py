@@ -79,7 +79,6 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     )  
 
     neptune_run["opt"] = vars(opt)
-    run_id = neptune_run._short_id
 
     # Directories
     w = save_dir / 'weights'  # weights dir
@@ -88,10 +87,11 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 
     # Save Neptune run id
 
-    neptune_run_id_output_path = os.path.join(save_dir,'neptune_run_id.json')
+    neptune_run_link_output_path = os.path.join(save_dir, 'neptune_run_link.json')
+    neptune_run_link = neptune_run.get_url()
 
-    with open(neptune_run_id_output_path, 'w') as f:
-        json.dump({'neptune_run_id': run_id}, f)
+    with open(neptune_run_link_output_path, 'w') as f:
+        json.dump({'neptune_run_link': neptune_run_link}, f)
 
     # Hyperparameters
     if isinstance(hyp, str):
