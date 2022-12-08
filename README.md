@@ -2,7 +2,7 @@
 
 ```
 git clone https://github.com/everguard-inc/yolov_5_multilabel.git --recursive
-
+cd yolov_5_multilabel
 sudo docker build -t $(whoami)/yolov5 .
 
 sudo docker run \
