@@ -1,5 +1,6 @@
 # YOLOv5 🚀 by Ultralytics, GPL-3.0 license
 import argparse
+from distutils.command.config import config
 import json
 import os
 import sys
@@ -130,81 +131,17 @@ class Yolov5MultilabelDetector:
         return pred
 
 
-def get_frames_with_bboxes_from_video(
-    videos_dir,
-    video_name,
-    capturing_frequency,
-    output_img_dir,
-    output_predictions_dir,
-    digits_num,
-    detector,
-    min_predictions_on_image
-):  
-    video_base_name, ext = os.path.splitext(video_name)
-    video_path = os.path.join(videos_dir, video_name)
-
-    print(f"Getting frames from video {video_path}")
-    capture = cv2.VideoCapture(cv2.samples.findFileOrKeep(video_path))
-
-    if not capture.isOpened:
-        print(f"Unable to open: {video_path}")
-        return
-
-    counter = 0
-    while True:
-
-        counter += 1
-        
-        ret, frame = capture.read()
-        
-        if not ret:
-            break
-
-        if counter % capturing_frequency == 0:
-            img_base_name = f"{video_base_name}_frame_{str.zfill(str(counter), digits_num)}"
-            img_path = os.path.join(output_img_dir, f"{img_base_name}.jpg")
-            prediction_path = os.path.join(output_predictions_dir, f"{img_base_name}.json")
-
-            predictions = detector.forward_image(frame)
-            
-            if len(predictions) > min_predictions_on_image:
-                # save ann
-                with open(prediction_path, 'w') as json_file:
-                    json.dump(predictions, json_file)
-                    
-                # save img
-                cv2.imwrite(img_path, frame)
-
-def detect_images_and_save_predictions(
-    img_dir,
-    predictions_dir,
-    detector,
-    min_predictions_on_image = 0,
-):
-    os.makedirs(predictions_dir, exist_ok=True)
-
-    for img_name in tqdm(os.listdir(img_dir)):
-        img_path = os.path.join(img_dir, img_name)
-        img_base_name = os.path.splitext(img_name)[0]
-        prediction_path = os.path.join(predictions_dir, f"{img_base_name}.json")
-
-        predictions = detector.forward_image(cv2.imread(img_path))
-
-        if len(predictions) >= min_predictions_on_image:
-            # save ann
-            with open(prediction_path, 'w') as json_file:
-                json.dump(predictions, json_file)
 
 def run_inference(
     img_dir,
-    predictions_dir,
+    config_path: str,
+    predictions_dir: str = None,
+    img_names_to_detect: List[str] = None,
     input_size = None, # inference size h,w
     weights = None,
     conf_threshold = None,
-):
-    os.makedirs(predictions_dir, exist_ok=True)
-    
-    config=load_yaml('./config.yaml')
+) -> Dict[str, List[int]]:
+    config=load_yaml(config_path)
     
     if weights is not None:
         config['weights'] = weights
@@ -212,20 +149,32 @@ def run_inference(
         config['input_size'] = input_size
     if conf_threshold is not None:
         config['nms_conf_thres'] = conf_threshold
-        
+    print('config', config)
     detector = Yolov5MultilabelDetector(config)
     
-    for img_name in tqdm(os.listdir(img_dir)):
+    if img_names_to_detect is None:
+        img_names_to_detect = os.listdir(img_dir)
+
+    predictions = dict()
+    for img_name in tqdm(img_names_to_detect, desc="Predicting"):
         
         img_base_name = os.path.splitext(img_name)[0]
         img_path = os.path.join(img_dir, img_name)
-        prediction_path = os.path.join(predictions_dir, f'{img_base_name}.json')
-        
-        img = cv2.imread(img_path)
-        prediction = detector.forward_image(img)
-        
-        with open(prediction_path, 'w') as json_file:
-            json.dump(prediction, json_file)
+        try:
+            img = cv2.imread(img_path)
+        except Error as e:
+            print('img_name', img_name, file = sys.stderr)
+            raise(e)
+        predictions[img_base_name] = detector.forward_image(img)
+    
+    if predictions_dir is not None:
+        os.makedirs(predictions_dir, exist_ok=True)
+        for img_base_name, prediction in preictions.items():
+            prediction_path = os.path.join(predictions_dir, f'{img_base_name}.json')
+            with open(prediction_path, 'w') as json_file:
+                json.dump(prediction, json_file)
+    
+    return predictions
                 
                 
 if __name__ == "__main__":
@@ -234,6 +183,7 @@ if __name__ == "__main__":
     parser.add_argument("--predictions_dir", type=str, required=True)
     parser.add_argument("--input_size", nargs='+', type=int, help='inference size h,w')
     parser.add_argument("--weights", type=str)
+    parser.add_argument("--config", type=str)
     parser.add_argument("--tr", type=float)
     args = parser.parse_args()
     
@@ -243,4 +193,5 @@ if __name__ == "__main__":
         input_size=args.input_size, # inference size h,w
         weights=args.weights,
         conf_threshold=args.tr,
+        config_path=args.config
     )
