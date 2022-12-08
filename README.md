@@ -1,6 +1,8 @@
 ## Setup
 
 ```
+git clone https://github.com/everguard-inc/yolov_5_multilabel.git --recursive
+
 sudo docker build -t $(whoami)/yolov5 .
 
 sudo docker run \
