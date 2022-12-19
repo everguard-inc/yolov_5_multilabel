@@ -1,8 +1,10 @@
 from detector import run_inference
 import json
+import tempfile
 
-from eg_data_tools.annotation_processing.coco_utils.coco_read_write import open_coco
-from eg_data_tools.model_evaluation.object_detection_metrics import evaluate_limages
+
+from eg_data_tools.annotation_processing.coco_utils.coco_read_write import open_coco, convert_labeled_images_to_coco
+from eg_data_tools.model_evaluation.object_detection_metrics import evaluate_limages, calculate_map
 from eg_data_tools.annotation_processing.converters.convert_from_detections_to_labeled_image import convert_detections_to_labeled_images
 import argparse
 
@@ -26,6 +28,28 @@ def get_classes_from_coco(coco_path):
         sorted_classes.append(category_dict[id])
 
     return sorted_classes
+
+
+def count_map(
+    images_dir: str,
+    gt_coco_path: str,
+    predicted_limages: list,
+    classes: list,
+) -> dict:
+    with tempfile.NamedTemporaryFile(mode='a') as tmpfile:
+        coco_content = convert_labeled_images_to_coco(
+            img_folder=images_dir,
+            labeled_image_list=predicted_limages,
+            classes=classes,
+        )
+        coco_content = json.dumps(coco_content)
+        tmpfile.write(coco_content)
+
+        map_metrics = calculate_map(
+            gt_coco_path=gt_coco_path,
+            predicted_coco_path=tmpfile.name
+        )
+    return map_metrics
 
 
 def evaluate_detector(
@@ -57,9 +81,19 @@ def evaluate_detector(
         iou_threshold=iou_threshold,
         score_threshold=score_threshold,
     )
+    
+    map_metrics = count_map(
+        images_dir=images_dir,
+        gt_coco_path=val_ann_coco,
+        predicted_limages=predicted_limages,
+        classes=classes,
+    )
+
+    metrics['mAP'] = map_metrics[0]
+    for cls_name in map_metrics[1]:
+        metrics[cls_name]['mAP'] = map_metrics[1][cls_name]
 
     print(metrics)
-
     return metrics
 
 if __name__ == "__main__":
