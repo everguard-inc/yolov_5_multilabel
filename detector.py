@@ -19,6 +19,9 @@ from utils.general import non_max_suppression, scale_coords
 from utils.torch_utils import select_device
 from utils.augmentations import letterbox
 
+from eg_data_tools.annotation_processing.converters.convert_from_detections_to_labeled_image import convert_detections_to_labeled_images
+from eg_data_tools.visualization.media.image import draw_bboxes_on_images  
+
 def load_yaml(path: str):
     with open(path, "r") as stream:
         content = yaml.load(stream, Loader=yaml.FullLoader)
@@ -140,9 +143,14 @@ def run_inference(
     input_size = None, # inference size h,w
     weights = None,
     conf_threshold = None,
+    visualizations_dir: str = None,
+    class_names: List[str] = None,
 ) -> Dict[str, List[int]]:
     config=load_yaml(config_path)
-    
+
+    if visualizations_dir is not None and class_names is None:
+        raise ValueError("class_names must be provided to visualize predictions")
+
     if weights is not None:
         config['weights'] = weights
     if input_size is not None:
@@ -151,7 +159,7 @@ def run_inference(
         config['nms_conf_thres'] = conf_threshold
     print('config', config)
     detector = Yolov5MultilabelDetector(config)
-    
+
     if img_names_to_detect is None:
         img_names_to_detect = os.listdir(img_dir)
 
@@ -169,14 +177,29 @@ def run_inference(
     
     if predictions_dir is not None:
         os.makedirs(predictions_dir, exist_ok=True)
-        for img_base_name, prediction in preictions.items():
+        for img_base_name, prediction in predictions.items():
             prediction_path = os.path.join(predictions_dir, f'{img_base_name}.json')
             with open(prediction_path, 'w') as json_file:
                 json.dump(prediction, json_file)
     
+    if visualizations_dir is not None:
+        os.makedirs(visualizations_dir, exist_ok=True)
+        predicted_limages = convert_detections_to_labeled_images(
+            detections_by_images=predictions,
+            detection_label_to_class_name={i: class_name for i, class_name in enumerate(class_names)},
+            conf_threshold=conf_threshold,
+            img_folder_path=img_dir,
+        )
+        
+        draw_bboxes_on_images(
+            labeled_image_list=predicted_limages,
+            img_folder=img_dir,
+            out_img_folder=visualizations_dir,
+        )
+    
     return predictions
-                
-                
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--img_dir", type=str, required=True)
@@ -185,13 +208,17 @@ if __name__ == "__main__":
     parser.add_argument("--weights", type=str)
     parser.add_argument("--config", type=str)
     parser.add_argument("--tr", type=float)
+    parser.add_argument("--viz_dir", type=str, default=None)
+    parser.add_argument("--class_names", nargs='*', type=str, default=None)
     args = parser.parse_args()
-    
+
     run_inference(
         img_dir=args.img_dir,
         predictions_dir=args.predictions_dir,
         input_size=args.input_size, # inference size h,w
         weights=args.weights,
         conf_threshold=args.tr,
-        config_path=args.config
+        config_path=args.config,
+        visualizations_dir=args.viz_dir,
+        class_names=args.class_names,
     )
