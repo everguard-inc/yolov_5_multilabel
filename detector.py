@@ -225,14 +225,4 @@ if __name__ == "__main__":
         visualizations_dir=args.viz_dir,
         detection_id_to_label_mapping=dict(zip(map(int, args.detection_id_mapping[0::2]), args.detection_id_mapping[1::2]))
     )
-    
-    # run_inference(
-    #     img_dir="/home/au/Documents/test_multilabel_ppe_detector/100_img",
-    #     config_path="/home/au/yolov_5_multilabel/config.yaml",
-    #     input_size=[736, 736],
-    #     weights="/home/au/yolov_5_multilabel/weights/yolov5m_2023-01-03-02-25-07_dataset_ppe_gerdau_hardhat_coco_3x736x736_6cf0f090.pt",
-    #     conf_threshold=0.5,
-    #     visualizations_dir="/home/au/Documents/test_multilabel_ppe_detector/viz_yolov_5_multilabel",
-    #     detection_id_to_label_mapping={i: label for i, label in enumerate(["in_hardhat", "not_in_hardhat", "hardhat_unrecognized"])}
-    # )
-    
+
