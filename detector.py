@@ -144,8 +144,17 @@ def run_inference(
     weights = None,
     conf_threshold = None,
     visualizations_dir: str = None,
-    detection_id_to_label_mapping: Dict[int, str] = None,
+    class_list: List[str] = None,
 ) -> Dict[str, List[int]]:
+    
+    detection_id_to_label_mapping = None
+    if visualizations_dir is not None:
+        os.makedirs(visualizations_dir, exist_ok=True)
+        detection_id_to_label_mapping = {i: cls_name for i, cls_name in enumerate(class_list)}        
+        
+    if class_list is None:
+        print("class_lsit is not specified. There will be a class indicies instead of class names on the visualizations")
+
     config=load_yaml(config_path)
 
     if weights is not None:
@@ -159,9 +168,6 @@ def run_inference(
 
     if img_names_to_detect is None:
         img_names_to_detect = os.listdir(img_dir)
-
-    if detection_id_to_label_mapping is None:
-        print("detection_id_to_label_mapping is not specified")
 
     predictions = dict()
     for img_name in tqdm(img_names_to_detect, desc="Predicting"):
@@ -177,7 +183,6 @@ def run_inference(
         predictions[img_base_name] = prediction
         
         if visualizations_dir is not None:
-            os.makedirs(visualizations_dir, exist_ok=True)
             if len(prediction) > 0:
                 limage = detection_to_labeled_image(
                     detections=prediction,
@@ -212,7 +217,9 @@ if __name__ == "__main__":
     parser.add_argument("--config", type=str)
     parser.add_argument("--tr", type=float)
     parser.add_argument("--viz_dir", type=str, default=None)
-    parser.add_argument("--detection_id_mapping", nargs='+', type=str, default=None, help='string of mapping class ids to class names, e.g. "0 person 1 car". It is used for mapping class ids to class names in visualization')
+    parser.add_argument("--classes", nargs='+', type=str, default=None, 
+                        help='Class names. They must be in the same order as the model returns them, because their indexes will be used to map class index to class names in the visualization')    
+
     args = parser.parse_args()
 
     run_inference(
@@ -223,6 +230,6 @@ if __name__ == "__main__":
         conf_threshold=args.tr,
         config_path=args.config,
         visualizations_dir=args.viz_dir,
-        detection_id_to_label_mapping=dict(zip(map(int, args.detection_id_mapping[0::2]), args.detection_id_mapping[1::2]))
+        class_list=args.classes
     )
 
