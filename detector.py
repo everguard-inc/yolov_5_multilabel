@@ -4,7 +4,7 @@ from distutils.command.config import config
 import json
 import os
 import sys
-from typing import Any, Dict, NoReturn, Tuple, List
+from typing import Any, Dict, Iterable, NoReturn, Tuple, List
 import cv2
 
 import numpy as np
@@ -136,16 +136,33 @@ class Yolov5MultilabelDetector:
 
 
 def run_inference(
-    img_dir,
+    img_dir: str,
     config_path: str,
+    weights: str,
+    conf_threshold: float,
+    input_size: Tuple[int, int],
     predictions_dir: str = None,
     img_names_to_detect: List[str] = None,
-    input_size = None, # inference size h,w
-    weights = None,
-    conf_threshold = None,
     visualizations_dir: str = None,
     class_list: List[str] = None,
-) -> Dict[str, List[int]]:
+) -> Dict[str, List[Dict]]:
+    """
+    Runs object detection on images and saves visualizations and/or predictions.
+
+    Args:
+        img_dir (str): Path to the directory containing the images to be processed.
+        config_path (str): Path to the yaml file containing the configuration.
+        weights (str): Path to the weights file.
+        conf_threshold (float): Detection confidence threshold.
+        input_size (Tuple[int, int]): Input size of the model.
+        predictions_dir (str, optional): Path to the directory where predictions will be saved. If None, predictions not be saved. Default is None. 
+        img_names_to_detect (List[str], optional): List of image names to detect. If None, all images in img_dir will be processed. Default is None.
+        visualizations_dir (str, optional): Path to the directory where visualizations will be saved. Default is None.
+        class_list (List[str], optional): List of class names. Used for visualization. Default is None.
+
+    Returns:
+        Dict[str, List[Dict]]: A dictionary of the form {img_name: detection}. Detection is a list of dictionaries, each representing a detection.
+    """
     
     detection_id_to_label_mapping = None
     if visualizations_dir is not None:
@@ -157,12 +174,12 @@ def run_inference(
 
     config=load_yaml(config_path)
 
-    if weights is not None:
-        config['weights'] = weights
-    if input_size is not None:
-        config['input_size'] = input_size
-    if conf_threshold is not None:
-        config['nms_conf_thres'] = conf_threshold
+    assert isinstance(input_size, Iterable) and len(input_size) == 2, "Specify input_size in format Tuple[int, int]"
+
+    config['weights'] = weights
+    config['input_size'] = input_size
+    config['nms_conf_thres'] = conf_threshold
+
     print('config', config)
     detector = Yolov5MultilabelDetector(config)
 
