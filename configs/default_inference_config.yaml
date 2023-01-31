@@ -11,7 +11,7 @@ input_size:
 iou_thres: 0.3
 iou_thres_post: 0.8
 max_det: 1000
-nms_conf_thres: 0.0
+nms_conf_thres: 0.4
 stride: 32
 suffixes:
 - .pt
