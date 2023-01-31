@@ -19,6 +19,9 @@ from utils.general import non_max_suppression, scale_coords
 from utils.torch_utils import select_device
 from utils.augmentations import letterbox
 
+from eg_data_tools.annotation_processing.converters.convert_from_detections_to_labeled_image import detection_to_labeled_image
+from eg_data_tools.visualization.media.image import draw_bboxes_on_image
+
 def load_yaml(path: str):
     with open(path, "r") as stream:
         content = yaml.load(stream, Loader=yaml.FullLoader)
@@ -140,9 +143,20 @@ def run_inference(
     input_size = None, # inference size h,w
     weights = None,
     conf_threshold = None,
+    visualizations_dir: str = None,
+    class_list: List[str] = None,
 ) -> Dict[str, List[int]]:
-    config=load_yaml(config_path)
     
+    detection_id_to_label_mapping = None
+    if visualizations_dir is not None:
+        os.makedirs(visualizations_dir, exist_ok=True)
+        detection_id_to_label_mapping = {i: cls_name for i, cls_name in enumerate(class_list)}        
+        
+    if class_list is None:
+        print("class_lsit is not specified. There will be a class indicies instead of class names on the visualizations")
+
+    config=load_yaml(config_path)
+
     if weights is not None:
         config['weights'] = weights
     if input_size is not None:
@@ -151,7 +165,7 @@ def run_inference(
         config['nms_conf_thres'] = conf_threshold
     print('config', config)
     detector = Yolov5MultilabelDetector(config)
-    
+
     if img_names_to_detect is None:
         img_names_to_detect = os.listdir(img_dir)
 
@@ -165,18 +179,35 @@ def run_inference(
         except Error as e:
             print('img_name', img_name, file = sys.stderr)
             raise(e)
-        predictions[img_base_name] = detector.forward_image(img)
-    
+        prediction = detector.forward_image(img)
+        predictions[img_base_name] = prediction
+        
+        if visualizations_dir is not None:
+            if len(prediction) > 0:
+                limage = detection_to_labeled_image(
+                    detections=prediction,
+                    img_name=img_name,
+                    width=img.shape[1],
+                    height=img.shape[0],
+                    detection_label_to_class_name=detection_id_to_label_mapping,
+                    conf_threshold=conf_threshold,
+                )
+                img = draw_bboxes_on_image(
+                    labeled_image=limage,
+                    img=img,
+                )
+            cv2.imwrite(os.path.join(visualizations_dir, img_name), img)
+
     if predictions_dir is not None:
         os.makedirs(predictions_dir, exist_ok=True)
-        for img_base_name, prediction in preictions.items():
+        for img_base_name, prediction in predictions.items():
             prediction_path = os.path.join(predictions_dir, f'{img_base_name}.json')
             with open(prediction_path, 'w') as json_file:
                 json.dump(prediction, json_file)
     
     return predictions
-                
-                
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--img_dir", type=str, required=True)
@@ -185,13 +216,20 @@ if __name__ == "__main__":
     parser.add_argument("--weights", type=str)
     parser.add_argument("--config", type=str)
     parser.add_argument("--tr", type=float)
+    parser.add_argument("--viz_dir", type=str, default=None)
+    parser.add_argument("--classes", nargs='+', type=str, default=None, 
+                        help='Class names. They must be in the same order as the model returns them, because their indexes will be used to map class index to class names in the visualization')    
+
     args = parser.parse_args()
-    
+
     run_inference(
         img_dir=args.img_dir,
         predictions_dir=args.predictions_dir,
         input_size=args.input_size, # inference size h,w
         weights=args.weights,
         conf_threshold=args.tr,
-        config_path=args.config
+        config_path=args.config,
+        visualizations_dir=args.viz_dir,
+        class_list=args.classes
     )
+
