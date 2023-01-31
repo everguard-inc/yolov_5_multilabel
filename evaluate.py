@@ -1,4 +1,4 @@
-from detector import run_inference
+from inference import run_inference
 import json
 import tempfile
 

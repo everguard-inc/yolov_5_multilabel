@@ -31,3 +31,16 @@ python evaluate.py \
 ```
 
 
+# Visualize
+
+```
+python inference.py \
+--img_dir path/to/images \
+--predictions_dir path/to/save/json_predictions \
+--input_size 736 736 \
+--weights models/yolov5m_2023-01-23-11-59-36_dataset_zekelman_person_person_on_truck_3x736x736_d787915d.pt \
+--config configs/default_inference_config.yaml \
+--tr 0.4 \
+--viz_dir path/to/save/viz_images \
+--classes on_truck not_on_truck
+```
