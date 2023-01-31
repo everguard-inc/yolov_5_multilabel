@@ -1,0 +1,19 @@
+agnostic_nms: false
+augment: false
+auto_letterbox: false
+classes: null
+classify: false
+device: 2
+half: true
+input_size:
+- 736
+- 736
+iou_thres: 0.3
+iou_thres_post: 0.8
+max_det: 1000
+nms_conf_thres: 0.0
+stride: 32
+suffixes:
+- .pt
+- .onnx
+weights: /media/data/vv/models/yolov5m_2022-12-07-20-29-03_dataset_ppe_seah_hardhat_yolo_3x736x736_5160b832.pt
