@@ -31,7 +31,7 @@ python evaluate.py \
 ```
 
 
-# Visualize
+# Visualize or Inference
 
 ```
 python inference.py \
