@@ -7,7 +7,7 @@ from eg_data_tools.annotation_processing.coco_utils.coco_read_write import open_
 from eg_data_tools.model_evaluation.object_detection_metrics import evaluate_limages, calculate_map
 from eg_data_tools.annotation_processing.converters.convert_from_detections_to_labeled_image import convert_detections_to_labeled_images
 import argparse
-
+import yaml
 
 def get_classes_from_coco(coco_path):
 
@@ -51,6 +51,13 @@ def count_map(
         )
     return map_metrics
 
+def load_yaml(path: str):
+    with open(path, "r") as stream:
+        content = yaml.load(stream, Loader=yaml.FullLoader)
+    return content
+
+
+
 
 def evaluate_detector(
     val_ann_coco,
@@ -63,10 +70,16 @@ def evaluate_detector(
     val_labeled_images = open_coco(val_ann_coco)
     classes = get_classes_from_coco(val_ann_coco)
 
+
+    config = load_yaml(config_path)
+
     predictions = run_inference(
+        img_names_to_detect = [limage.name for limage in val_labeled_images],
         img_dir = images_dir,
         config_path = config_path,
-        img_names_to_detect = [limage.name for limage in val_labeled_images],
+        weights = config["weights"],
+        conf_threshold = config["nms_conf_thres"],
+        input_size = config["input_size"],
     )
     
     predicted_limages = convert_detections_to_labeled_images(
