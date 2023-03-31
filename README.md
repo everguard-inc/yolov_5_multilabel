@@ -3,18 +3,19 @@
 ```
 git clone https://github.com/everguard-inc/yolov_5_multilabel.git --recursive
 cd yolov_5_multilabel
-sudo docker build -t $(whoami)/yolov5 .
 
-sudo docker run \
+# Build
+docker build --build-arg USER_ID=$(id -u) --build-arg GROUP_ID=$(id -g) -t $USER/yolov5 .
+
+# Run
+docker run \
 --rm -it \
 --gpus all \
 --shm-size 8G \
 --hostname $(hostname) \
---mount type=bind,source="$PWD",target=/app \
---mount type=bind,source="/home",target=/home \
---mount type=bind,source="/media",target=/media \
---privileged \
-$(whoami)/yolov5
+--user $(id -u):$(id -g) \
+--mount type=bind,source=$HOME,target=$HOME \
+$USER/yolov5
 ```
 
 # Evaluate
