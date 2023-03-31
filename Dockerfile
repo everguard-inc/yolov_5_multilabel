@@ -17,26 +17,6 @@ RUN pip uninstall -y nvidia-tensorboard nvidia-tensorboard-plugin-dlprof
 RUN pip install -r requirements.txt --no-cache
 RUN pip install "opencv-python-headless<=4.3" --no-cache
 
-# Create a user who will own the files created in the docker container 
-ARG USER_ID
-ARG GROUP_ID
-
-RUN addgroup --gid $GROUP_ID appgroup 
-RUN adduser --disabled-password --gecos '' --uid $USER_ID --gid $GROUP_ID appuser
-
-# Create working directory
-RUN mkdir -p /app
-WORKDIR /app
-
-# Copy contents
-COPY . /app
-
-# Change workdir permissions
-RUN chown -R appuser:appgroup /app && chmod 755 /app
-
-# Change user from root to appuser
-USER appuser
-
 # Downloads to user config dir
 ADD https://ultralytics.com/assets/Arial.ttf /root/.config/Ultralytics/
 

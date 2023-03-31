@@ -1,18 +1,20 @@
 ## Setup
 
+
+
 ```
 git clone https://github.com/everguard-inc/yolov_5_multilabel.git --recursive
 cd yolov_5_multilabel
 
 # Build
-docker build --build-arg USER_ID=$(id -u) --build-arg GROUP_ID=$(id -g) -t $USER/yolov5 .
+docker build -t $USER/yolov5 .
 
 # Run
 docker run \
 --rm -it \
 --gpus all \
 --shm-size 8G \
---hostname $(hostname) \
+--workdir $(pwd) \
 --user $(id -u):$(id -g) \
 --mount type=bind,source=$HOME,target=$HOME \
 $USER/yolov5
