@@ -63,8 +63,6 @@ def evaluate_detector(
     val_ann_coco,
     images_dir,
     config_path,
-    iou_threshold: float = 0.5,
-    score_threshold: float = 0.5,
 ):
 
     val_labeled_images = open_coco(val_ann_coco)
@@ -85,14 +83,14 @@ def evaluate_detector(
     predicted_limages = convert_detections_to_labeled_images(
         detections_by_images=predictions,
         detection_label_to_class_name={i: class_name for i, class_name in enumerate(classes)},
-        conf_threshold=score_threshold,
+        conf_threshold=config["nms_conf_thres"],
         img_folder_path=images_dir,
     )
     metrics = evaluate_limages(
         gt_limages=val_labeled_images,
         predicted_limages=predicted_limages,
-        iou_threshold=iou_threshold,
-        score_threshold=score_threshold,
+        iou_threshold=config["iou_thres"],
+        score_threshold=config["nms_conf_thres"],
     )
     
     map_metrics = count_map(
@@ -114,14 +112,10 @@ if __name__ == "__main__":
     parser.add_argument("--images_dir", type=str, required=True)
     parser.add_argument("--val_ann_coco", type=str, required=True)
     parser.add_argument("--config_path", type=str, default="config.yaml")
-    parser.add_argument("--score_threshold", type=float, required=True)
-    parser.add_argument("--iou_threshold", type=float, default=0.5)
     args = parser.parse_args()
 
     evaluate_detector(
         val_ann_coco=args.val_ann_coco,
         images_dir=args.images_dir,
         config_path=args.config_path,
-        iou_threshold=args.iou_threshold,
-        score_threshold=args.score_threshold,
     )

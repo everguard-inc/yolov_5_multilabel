@@ -20,6 +20,9 @@ RUN pip install "opencv-python-headless<=4.3" --no-cache
 # Downloads to user config dir
 ADD https://ultralytics.com/assets/Arial.ttf /root/.config/Ultralytics/
 
+RUN mkdir /.cache && chmod 777 /.cache
+RUN mkdir /.config && chmod 777 /.config
+
 
 # Set environment variables
 # ENV HOME=/usr/src/app

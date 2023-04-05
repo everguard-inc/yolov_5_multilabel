@@ -22,15 +22,13 @@ $USER/yolov5
 
 # Evaluate
 
-Specify model path and input size in the `config.yaml`
+Specify model parameters in the `config.yaml`
 
 ```
 python evaluate.py \
 --val_ann_coco /path/to/val.json \
 --images_dir /path/to/images \
---config_path config.yaml \
---iou_threshold 0.5 \
---score_threshold 0.5
+--config_path config.yaml
 ```
 
 
