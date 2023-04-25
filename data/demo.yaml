@@ -1,0 +1,7 @@
+names:
+- in_hardhat
+- not_in_hardhat
+- hardhat_unrecognized
+nc: 3
+train: /media/data/vv/tests_data/dvc_datasets/dataset_for_demo/DemoHardhatDetection/train/images
+val: /media/data/vv/tests_data/dvc_datasets/dataset_for_demo/DemoHardhatDetection/val/images

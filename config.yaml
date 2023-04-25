@@ -1,7 +1,7 @@
-weights: weights/best_exp50_4classes.pt
-device: 0 # cuda device, i.e. 0 or 0,1,2,3 or cpu
-input_size: [1280, 1280] # inference size h,w
-nms_conf_thres: 0.0  # confidence threshold
+weights: /media/data/vv/models/yolov5m_2022-12-07-20-29-03_dataset_ppe_seah_hardhat_yolo_3x736x736_5160b832.pt
+device: 1 # cuda device, i.e. 0 or 0,1,2,3 or cpu
+input_size: [736, 736] # inference size h,w
+nms_conf_thres: 0.4  # confidence threshold
 iou_thres: 0.3  # NMS IOU threshold
 max_det: 1000  # maximum detections per image
 classes: null  # filter by class: --class 0, or --class 0 2 3
@@ -12,8 +12,8 @@ classify: False  # False
 suffixes: ['.pt', '.onnx']
 stride: 32
 auto_letterbox: false
-
-
+batch_size: 16
+pad: 0.5
 max_age: 200
 min_hits: 3
 iou_threshold: 0.3
