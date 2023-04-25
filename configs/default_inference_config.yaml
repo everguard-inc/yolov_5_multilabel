@@ -12,3 +12,5 @@ stride: 32
 suffixes:
 - .pt
 - .onnx
+batch_size: 12
+pad: 0.5
