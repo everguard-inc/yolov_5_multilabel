@@ -1,0 +1,18 @@
+weights: /home/st/tasks/3.04_yolo_ppe/yolov5m_2023-03-04-03-18-02_dataset_ppe_seah_hardhat_coco_3x736x736_6b34cc65.pt
+device: 2 # cuda device, i.e. 0 or 0,1,2,3 or cpu
+input_size: [736, 736] # inference size h,w
+nms_conf_thres: 0.35  # confidence threshold
+iou_thres: 0.5  # NMS IOU threshold
+iou_thres_post: 0.8
+max_det: 1000  # maximum detections per image
+classes: null  # filter by class: --class 0, or --class 0 2 3
+agnostic_nms: False # class-agnostic NMS
+augment: False  # augmented inference
+half: True  # use FP16 half-precision inference
+classify: False  # False
+suffixes: ['.pt', '.onnx']
+stride: 32
+auto_letterbox: false
+batch_size: 12
+pad: 0.5
+data: configs/demo.yaml

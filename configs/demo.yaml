@@ -1,0 +1,7 @@
+names:
+- in_hardhat
+- not_in_hardhat
+- hardhat_unrecognized
+nc: 3
+train: /home/st/pfs/train/images
+val: some/in
