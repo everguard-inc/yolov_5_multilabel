@@ -53,7 +53,7 @@ class Yolov5MultilabelDetector:
 
     def _load_model(self) -> NoReturn:
         # Load model
-        self._model = DetectMultiBackend(self._weights, device=self._device, data='configs/demo.yaml')
+        self._model = DetectMultiBackend(self._weights, device=self._device)
 
         pt, jit, onnx, engine = self._model.pt, self._model.jit, self._model.onnx, self._model.engine
         
