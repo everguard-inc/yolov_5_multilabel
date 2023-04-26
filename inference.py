@@ -15,6 +15,7 @@ import yaml
 sys.path.append(os.path.abspath(__file__ + "/.."))
 
 from models.common import DetectMultiBackend
+from utils.datasets import create_dataloader
 from utils.general import non_max_suppression, scale_coords
 from utils.torch_utils import select_device
 from utils.augmentations import letterbox
@@ -66,72 +67,47 @@ class Yolov5MultilabelDetector:
     def _warmup(self) -> NoReturn:
         self._model.warmup(imgsz=(1, 3, *self._input_size), half=self._half)
 
-    def _preprocess(self, img0: np.ndarray) -> np.ndarray:
+    def _preprocess(self, ims0: np.ndarray) -> np.ndarray:
         """
         Args:
-            img: 3-dimentional image in BGR format
+            img: 4-dimentional image batch in BGR format
         """
-
-        # Padded resize
-        img = letterbox(img0, self._input_size, stride=self._stride, auto=self._auto_letterbox)[0]
-
-        # Convert
-        img = img.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB
-        img = np.ascontiguousarray(img)
-
-        im, im0s = img, img0
-
-        im = torch.from_numpy(im).to(self._device)
-        im = im.half() if self._half else im.float()  # uint8 to fp16/32
-        im /= 255  # 0 - 255 to 0.0 - 1.0
-        if len(im.shape) == 3:
-            im = im[None]  # expand for batch dim
-
-        return im, im0s
+        ims = ims0.to(self._device)
+        ims = ims.half()
+        ims /= 255  # 0 - 255 to 0.0 - 1.0
+        return ims
 
     @staticmethod
-    def _postprocess_detections(pred, im, im0s):
+    def _postprocess_detections(preds, ims, shapess):
         detections = list()
-        for i, det in enumerate(pred):
+        for bi, (pred, im, shapes) in enumerate(zip(preds, ims, shapess)):
             result = list()
-            if len(det):
-                # Rescale boxes from img_size to im0 size
-                det[:, :4] = scale_coords(im.shape[2:], det[:, :4], im0s.shape).round()
-
-                for *xyxy, conf, cls in reversed(det.cpu().numpy().tolist()):
-                    
-                    x1, y1, x2, y2 = xyxy
-                    result.append([
-                        x1, 
-                        y1, 
-                        x2, 
-                        y2, 
-                        conf, 
-                        cls
-                    ]) 
-            
-            detections.append(result) 
+            if len(pred):
+                # Rescale boxes from img_size to base shapes size
+                scale_coords(im.shape[1:], pred[:, :4], shapes[0], shapes[1])
+                result = pred.cpu().numpy().tolist()
+            detections.append(result)
         return detections
 
     @torch.no_grad()
-    def forward_image(self, img: np.ndarray) -> List[np.ndarray]:
+    def forward_image(self, ims0: np.ndarray, shapess: list) -> List[np.ndarray]:
         """
-        returns: [[x, y, w, h, conf, cls], ...]
+        returns: [ [[x, y, w, h, conf, cls], ...] ]
         """
         # preprocess
-        im, im0s = self._preprocess(img)
+        ims = self._preprocess(ims0)
 
         # Inference
-        pred = self._model(im, augment=self._augment, visualize=False)
+        preds = self._model(ims, augment=self._augment, visualize=False)
 
         # NMS
-        pred = non_max_suppression(pred, self._nms_conf_thres, self._iou_thres, self._classes, self._agnostic_nms,
+        preds = non_max_suppression(preds, self._nms_conf_thres, self._iou_thres, self._classes, self._agnostic_nms,
                                    max_det=self._max_det)
 
         # Process predictions
-        pred = self._postprocess_detections(pred, im, im0s)[0]
+        preds = self._postprocess_detections(preds, ims, shapess)
 
-        return pred
+        return preds
 
 
 
@@ -167,8 +143,8 @@ def run_inference(
     detection_id_to_label_mapping = None
     if visualizations_dir is not None:
         os.makedirs(visualizations_dir, exist_ok=True)
-        detection_id_to_label_mapping = {i: cls_name for i, cls_name in enumerate(class_list)}        
-        
+        detection_id_to_label_mapping = {i: cls_name for i, cls_name in enumerate(class_list)}
+
     if class_list is None:
         print("class_lsit is not specified. There will be a class indicies instead of class names on the visualizations")
 
@@ -180,40 +156,50 @@ def run_inference(
     config['input_size'] = input_size
     config['nms_conf_thres'] = conf_threshold
 
-    print('config', config)
+    # print('config', config)
     detector = Yolov5MultilabelDetector(config)
 
     if img_names_to_detect is None:
         img_names_to_detect = os.listdir(img_dir)
 
+    dataloader = create_dataloader(
+        img_dir,
+        config['input_size'][0],
+        config['batch_size'],
+        config['stride'],
+        pad=config['pad'],
+        rect=detector._model.pt,
+        workers=1,
+        # prefix=color[0]str(f'{task}: ')
+    )[0]
+
     predictions = dict()
-    for img_name in tqdm(img_names_to_detect, desc="Predicting"):
-        
-        img_base_name = os.path.splitext(img_name)[0]
-        img_path = os.path.join(img_dir, img_name)
-        try:
-            img = cv2.imread(img_path)
-        except Error as e:
-            print('img_name', img_name, file = sys.stderr)
-            raise(e)
-        prediction = detector.forward_image(img)
-        predictions[img_base_name] = prediction
+    for i, (img, targets, paths, shapes) in enumerate(tqdm(dataloader, desc="Predicting")):
+        img_names = [path.split('/')[-1] for path in paths]
+        img_base_names = [img_name.split('.')[0] for img_name in img_names]
+
+        predictions_batch = detector.forward_image(img, shapes)
+
+        for img_base_name, prediction in zip(img_base_names, predictions_batch):
+            predictions[img_base_name] = prediction
         
         if visualizations_dir is not None:
-            if len(prediction) > 0:
-                limage = detection_to_labeled_image(
-                    detections=prediction,
-                    img_name=img_name,
-                    width=img.shape[1],
-                    height=img.shape[0],
-                    detection_label_to_class_name=detection_id_to_label_mapping,
-                    conf_threshold=conf_threshold,
-                )
-                img = draw_bboxes_on_image(
-                    labeled_image=limage,
-                    img=img,
-                )
-            cv2.imwrite(os.path.join(visualizations_dir, img_name), img)
+            for path, img_name, prediction in zip(paths, img_names, predictions_batch):
+                img = cv2.imread(path)
+                if len(prediction) > 0:
+                    limage = detection_to_labeled_image(
+                        detections=prediction,
+                        img_name=img_name,
+                        width=img.shape[1],
+                        height=img.shape[0],
+                        detection_label_to_class_name=detection_id_to_label_mapping,
+                        conf_threshold=conf_threshold,
+                    )
+                    img = draw_bboxes_on_image(
+                        labeled_image=limage,
+                        img=img,
+                    )
+                cv2.imwrite(os.path.join(visualizations_dir, img_name), img)
 
     if predictions_dir is not None:
         os.makedirs(predictions_dir, exist_ok=True)

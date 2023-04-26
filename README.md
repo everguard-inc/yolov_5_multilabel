@@ -29,6 +29,9 @@ python evaluate.py \
 --val_ann_coco /path/to/val.json \
 --images_dir /path/to/images \
 --config_path config.yaml
+
+#or
+sh run_eval.sh
 ```
 
 
@@ -44,4 +47,7 @@ python inference.py \
 --tr 0.4 \
 --viz_dir path/to/save/viz_images \
 --classes on_truck not_on_truck
+
+# or
+sh run_inference.sh
 ```
