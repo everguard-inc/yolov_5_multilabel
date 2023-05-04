@@ -5,13 +5,15 @@ nms_conf_thres: 0.0  # confidence threshold
 iou_thres: 0.3  # NMS IOU threshold
 max_det: 1000  # maximum detections per image
 classes: null  # filter by class: --class 0, or --class 0 2 3
-agnostic_nms: True # class-agnostic NMS
+agnostic_nms: False # class-agnostic NMS
 augment: False  # augmented inference
 half: True  # use FP16 half-precision inference
 classify: False  # False
 suffixes: ['.pt', '.onnx']
 stride: 32
 auto_letterbox: false
+
+
 
 
 max_age: 200

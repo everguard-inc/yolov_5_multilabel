@@ -296,9 +296,12 @@ def run_evaluation(
             final_report[vid_name]['TP'] += 1 if total_false_percent < false_actions_percent_threshold else 0
             final_report[vid_name]['classification FN'] += 1 if cls_false_percent > false_actions_percent_threshold else 0
             final_report[vid_name]['localization FN'] += 1 if localization_false_percent > false_actions_percent_threshold else 0
-        
+    
     report = pd.DataFrame(final_report).T
-    report.to_excel(report_path)
+    sum_row = pd.DataFrame(report.sum(), columns=['Total']).T
+    report = pd.concat([report, sum_row])
+    report_dict = report.T.to_dict()
+    save_json(report_dict, report_path)
     print(tabulate(report, headers ='keys', tablefmt = 'psql'))
     print(f"Report saved to {Path(report_path).resolve()}")
 
