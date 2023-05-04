@@ -36,3 +36,6 @@ seaborn>=0.11.0
 # roboflow
 thop  # FLOPs computation
 neptune-client
+filterpy
+
+git+https://github.com/everguard-inc/eg_utils
