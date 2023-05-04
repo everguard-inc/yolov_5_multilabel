@@ -69,7 +69,7 @@ class Yolov5MultilabelDetector:
     def _preprocess(self, img0: np.ndarray) -> np.ndarray:
         """
         Args:
-            img: 3-dimentional image in BGR format
+            img (np.ndarray): 3-dimentional image in BGR format
         """
 
         # Padded resize
@@ -116,12 +116,16 @@ class Yolov5MultilabelDetector:
     @torch.no_grad()
     def forward_image(self, img: np.ndarray) -> List[np.ndarray]:
         """
+        Args:
+            img (np.ndarray): image in BGR format
+
         returns: [[x, y, w, h, conf, cls], ...]
         """
         # preprocess
         im, im0s = self._preprocess(img)
 
         # Inference
+        # im: torch.Size([1, 3, 736, 736])
         pred = self._model(im, augment=self._augment, visualize=False)
 
         # NMS
