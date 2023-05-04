@@ -139,9 +139,8 @@ class Yolov5MultilabelDetector:
         """
         # preprocess
         im, im0s = self._preprocess(img)
-
         # Inference
-        # Here `im` is a torch.Tensor with shape [batch_size, channels, input_size, input_size]
+        # Here `im` is a torch.Tensor with shape [batch_size, channels, input_size, input_size]. Colorspace is RGB
         pred = self._model(im, augment=self._augment, visualize=False)
 
         # NMS
