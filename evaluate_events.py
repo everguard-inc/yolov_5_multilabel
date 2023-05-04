@@ -23,7 +23,7 @@ from models.common import DetectMultiBackend
 from eg_data_tools.os_utils.get_free_gpu import get_free_gpu_id
 from eg_data_tools.data_units.data_units import LabeledImage, BBox
 from eg_data_tools.visualization.media.image import draw_bboxes_on_image
-from eg_data_tools.filesystem_utils.transform.read_write import load_yaml, open_csv
+from eg_data_tools.filesystem_utils.transform.read_write import load_yaml, open_csv, save_json
 
 
 def setup_config(
@@ -41,6 +41,7 @@ def setup_config(
     config['weights'] = weights_path
     config['iou_thres'] = iou_thres
     config['nms_conf_thres'] = conf_thres
+    config['agnostic_nms'] = True
     
     return config
 
@@ -155,6 +156,7 @@ def run_evaluation(
     video_path: str,
     viz_dir_path: str = None,
     model_config_path: str = None,
+    tracker_config_path: str = None,
     device_id: int = None,
     iou_thres: float = 0.3,
     conf_thres: float = 0.5,
@@ -185,10 +187,13 @@ def run_evaluation(
     
     if model_config_path is None:
         model_config_path = Path(__file__).parent / "config.yaml"
+    
+    if tracker_config_path is None:
+        tracker_config_path = Path(__file__).parent / "tracker_config.yaml"
         
     events = preprocess_events(events_list_path)
     
-    config = setup_config(
+    model_config = setup_config(
         config_path=model_config_path,
         weights_path=model_path,
         device_id=device_id,
@@ -196,6 +201,8 @@ def run_evaluation(
         conf_thres=conf_thres,
         input_size=input_size,
     )
+    
+    tracker_config = load_yaml(tracker_config_path)
     
     classes_mapping = {i: class_name for i, class_name in enumerate(class_names)}
     
@@ -208,15 +215,15 @@ def run_evaluation(
     
     assert len(video_path) == len(events), "Number of videos and events should be equal"
     
-    model = Yolov5MultilabelDetector(config=config)
-    tracker = Sort(config=config)
+    model = Yolov5MultilabelDetector(config=model_config)
+    tracker = Sort(config=tracker_config)
     out_video_writer = None
     
 
     for video_pth in video_path:
         print(f"Processing video {video_pth.name}")
         
-        dataset = LoadImages(path=video_pth, img_size=config["input_size"], stride=config["stride"], auto=config["auto_letterbox"])
+        dataset = LoadImages(path=video_pth, img_size=model_config["input_size"], stride=model_config["stride"], auto=model_config["auto_letterbox"])
         
         current_event_timesteps = events[video_pth.name]
         if viz_dir_path:
@@ -317,6 +324,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--video_path", type=str, required=True)
     parser.add_argument("--viz_dir_path", type=str, default=None)
     parser.add_argument("--model_config_path", type=str, default=None)
+    parser.add_argument("--tracker_config_path", type=str, default=None)
     parser.add_argument("--device", type=str, default=None)
     parser.add_argument("--iou_thresh", type=float, default=0.3)
     parser.add_argument("--score_thresh", type=float, default=0.5)
@@ -338,6 +346,7 @@ if __name__ == "__main__":
         video_path=args.video_path,
         viz_dir_path=args.viz_dir_path,
         model_config_path=args.model_config_path,
+        tracker_config_path=args.tracker_config_path,
         device_id=args.device,
         iou_thres=args.iou_thresh,
         conf_thres=args.score_thresh,

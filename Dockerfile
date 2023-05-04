@@ -9,6 +9,9 @@ RUN apt update && apt install -y zip htop screen libgl1-mesa-glx
 COPY eg_data_tools eg_data_tools/
 RUN pip install -e eg_data_tools
 
+COPY eg_utils eg_utils/
+RUN pip install -e eg_utils
+
 # Install python dependencies
 COPY requirements.txt .
 RUN python -m pip install --upgrade pip

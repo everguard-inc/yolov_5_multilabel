@@ -12,11 +12,3 @@ classify: False  # False
 suffixes: ['.pt', '.onnx']
 stride: 32
 auto_letterbox: false
-
-
-
-
-max_age: 200
-min_hits: 3
-iou_threshold: 0.3
-buffer: 7
