@@ -66,10 +66,26 @@ class Yolov5MultilabelDetector:
     def _warmup(self) -> NoReturn:
         self._model.warmup(imgsz=(1, 3, *self._input_size), half=self._half)
 
-    def _preprocess(self, img0: np.ndarray) -> np.ndarray:
+    def _preprocess(self, img0: np.ndarray) -> torch.Tensor:
         """
+        Preprocesses an image for input into a YOLOv5 object detection model.
+        
         Args:
-            img (np.ndarray): 3-dimentional image in BGR format
+            img0 (np.ndarray): Original 3-dimentional image in BGR format  to be processed. 
+        
+        Returns:
+            im: Preprocessed image as a PyTorch tensor, ready for input into the YOLOv5 model. 
+            im0s: Original image, unchanged and stored for display purposes.
+        
+        Steps:
+            1. Resize and pad the input image using letterboxing.
+            2. Convert the image from HWC (height, width, channels) format to CHW (channels, height, width) format and from BGR to RGB.
+            3. Convert the image to a contiguous array.
+            4. Convert the array to a PyTorch tensor and move it to the device specified during initialization.
+            5. Convert the tensor to float or half precision, depending on the `_half` attribute.
+            6. Scale the pixel values from 0-255 to 0.0-1.0 range.
+            7. If the tensor does not have a batch dimension, add one.
+            8. Return the preprocessed tensor and the original, unprocessed image for display purposes.
         """
 
         # Padded resize
@@ -125,7 +141,7 @@ class Yolov5MultilabelDetector:
         im, im0s = self._preprocess(img)
 
         # Inference
-        # im: torch.Size([1, 3, 736, 736])
+        # Here `im` is a torch.Tensor with shape [batch_size, channels, input_size, input_size]
         pred = self._model(im, augment=self._augment, visualize=False)
 
         # NMS
