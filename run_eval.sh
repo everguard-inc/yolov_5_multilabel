@@ -1,6 +1,6 @@
 python evaluate.py \
---val_ann_coco /media/data2/vv/dvc_datasets/dataset_person_remote/coco/ann/person/val.json \
---images_dir /media/data2/vv/dvc_datasets/dataset_person_remote/coco/images \
---config_path /home/vv/yolov_5_multilabel/configs/yolov5m_2022-11-30-01-59-36_dataset_person_remote_yolo_3x736x736_2635051d.yaml \
+--val_ann_coco /media/data3/vv/dvc_datasets/dataset_ppe/seah_hardhat_coco/ann/hardhat/val.json \
+--images_dir /media/data3/vv/dvc_datasets/dataset_ppe/seah_hardhat_coco/val/images/ \
+--config_path config.yaml \
 --iou_threshold 0.5 \
 --score_threshold 0.5
