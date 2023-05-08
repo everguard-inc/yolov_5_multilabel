@@ -153,12 +153,6 @@ class Yolov5MultilabelDetector:
         # Inference
         # Here `im` is a torch.Tensor with shape [batch_size, channels, input_size, input_size]. Colorspace is RGB
 
-        # img_write = im[0].to('cpu').numpy() * 256
-        # img_write = img_write.transpose((1, 2, 0))  # HWC to CHW, BGR to RGB
-        # img_write = cv2.cvtColor(img_write, cv2.COLOR_RGB2BGR)
-        # cv2.imwrite('name.png', img_write)
-        # exit(0)
-
         pred = self._model(im, augment=self._augment, visualize=False)
 
         # NMS
