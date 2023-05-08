@@ -15,7 +15,6 @@ import yaml
 sys.path.append(os.path.abspath(__file__ + "/.."))
 
 from models.common import DetectMultiBackend
-from utils.datasets import create_dataloader
 from utils.general import non_max_suppression, scale_coords
 from utils.torch_utils import select_device
 from utils.augmentations import letterbox
@@ -50,6 +49,7 @@ class Yolov5MultilabelDetector:
         self._classify = config["classify"]  # False
         self._stride = config["stride"]
         self._auto_letterbox = config["auto_letterbox"]
+        self._pad = config['pad']
 
     def _load_model(self) -> NoReturn:
         # Load model
@@ -67,47 +67,108 @@ class Yolov5MultilabelDetector:
     def _warmup(self) -> NoReturn:
         self._model.warmup(imgsz=(1, 3, *self._input_size), half=self._half)
 
-    def _preprocess(self, ims0: np.ndarray) -> np.ndarray:
+    def _preprocess(self, img0: np.ndarray) -> torch.Tensor:
         """
+        Preprocesses an image for input into a YOLOv5 object detection model.
+        
         Args:
-            img: 4-dimentional image batch in BGR format
+            img0 (np.ndarray): Original 3-dimentional image in BGR format  to be processed. 
+        
+        Returns:
+            im: Preprocessed image as a PyTorch tensor, ready for input into the YOLOv5 model. 
+            im0s: Original image, unchanged and stored for display purposes.
+        
+        Steps:
+            1. Resize and pad the input image using letterboxing.
+            2. Convert the image from HWC (height, width, channels) format to CHW (channels, height, width) format and from BGR to RGB.
+            3. Convert the image to a contiguous array.
+            4. Convert the array to a PyTorch tensor and move it to the device specified during initialization.
+            5. Convert the tensor to float or half precision, depending on the `_half` attribute.
+            6. Scale the pixel values from 0-255 to 0.0-1.0 range.
+            7. If the tensor does not have a batch dimension, add one.
+            8. Return the preprocessed tensor and the original, unprocessed image for display purposes.
         """
-        ims = ims0.to(self._device)
-        ims = ims.half()
-        ims /= 255  # 0 - 255 to 0.0 - 1.0
-        return ims
+
+        img = img0.copy()
+        # Padded resize
+        assert self._input_size[0] == self._input_size[1]
+        input_size = self._input_size[0]
+
+        shape0 = img.shape[:2]
+        shape = np.array(shape0, dtype=float) / max(shape0)
+        shape = np.ceil(shape * input_size / self._stride + self._pad).astype(np.int32) * self._stride
+        r = input_size / max(shape0)  # ratio
+        if r != 1:  # if sizes are not equal
+            h0, w0 = shape0
+            img = cv2.resize(img.copy(), (int(w0 * r), int(h0 * r)),
+                             interpolation=cv2.INTER_AREA)
+        
+        img, ratio, pad = letterbox(img, shape, auto=self._auto_letterbox, scaleup=False)
+
+        # Convert
+        img = img.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB
+        img = np.ascontiguousarray(img)
+
+        im, im0s = img, img0
+
+        im = torch.from_numpy(im).to(self._device)
+        im = im.half() if self._half else im.float()  # uint8 to fp16/32
+        im /= 255  # 0 - 255 to 0.0 - 1.0
+        if len(im.shape) == 3:
+            im = im[None]  # expand for batch dim
+
+        return im, im0s, pad
 
     @staticmethod
-    def _postprocess_detections(preds, ims, shapess):
+    def _postprocess_detections(pred, im, im0s, pad):
         detections = list()
-        for bi, (pred, im, shapes) in enumerate(zip(preds, ims, shapess)):
+        shape = im.shape[2:]
+        h, w = shape
+        w -= 2*pad[0]
+        h -= 2*pad[1]        
+        base_shape = im0s.shape[:2]
+        h0, w0 = base_shape
+        params = ((h / h0, w / w0), pad)
+
+        for i, det in enumerate(pred):
             result = list()
-            if len(pred):
-                # Rescale boxes from img_size to base shapes size
-                scale_coords(im.shape[1:], pred[:, :4], shapes[0], shapes[1])
-                result = pred.cpu().numpy().tolist()
-            detections.append(result)
-        return detections
+            if len(det):
+                # Rescale boxes from img_size to im0 size
+                # det format: np.array[[x1, y1, x2, y2, conf, cls], ...]
+                det[:, :4] = scale_coords(shape, det[:, :4], base_shape, params).round()
+                result = det.cpu().numpy().tolist()
+            detections.append(result) 
+        return detections[0]
 
     @torch.no_grad()
-    def forward_image(self, ims0: np.ndarray, shapess: list) -> List[np.ndarray]:
+    def forward_image(self, img: np.ndarray) -> List[np.ndarray]:
         """
-        returns: [ [[x, y, w, h, conf, cls], ...] ]
+        Args:
+            img (np.ndarray): image in BGR format
+
+        returns: [[x, y, w, h, conf, cls], ...]
         """
         # preprocess
-        ims = self._preprocess(ims0)
-
+        im, im0s, pad = self._preprocess(img)
         # Inference
-        preds = self._model(ims, augment=self._augment, visualize=False)
+        # Here `im` is a torch.Tensor with shape [batch_size, channels, input_size, input_size]. Colorspace is RGB
+
+        # img_write = im[0].to('cpu').numpy() * 256
+        # img_write = img_write.transpose((1, 2, 0))  # HWC to CHW, BGR to RGB
+        # img_write = cv2.cvtColor(img_write, cv2.COLOR_RGB2BGR)
+        # cv2.imwrite('name.png', img_write)
+        # exit(0)
+
+        pred = self._model(im, augment=self._augment, visualize=False)
 
         # NMS
-        preds = non_max_suppression(preds, self._nms_conf_thres, self._iou_thres, self._classes, self._agnostic_nms,
+        pred = non_max_suppression(pred, self._nms_conf_thres, self._iou_thres, self._classes, self._agnostic_nms,
                                    max_det=self._max_det)
 
         # Process predictions
-        preds = self._postprocess_detections(preds, ims, shapess)
+        pred = self._postprocess_detections(pred, im, im0s, pad)
 
-        return preds
+        return pred
 
 
 
@@ -143,8 +204,8 @@ def run_inference(
     detection_id_to_label_mapping = None
     if visualizations_dir is not None:
         os.makedirs(visualizations_dir, exist_ok=True)
-        detection_id_to_label_mapping = {i: cls_name for i, cls_name in enumerate(class_list)}
-
+        detection_id_to_label_mapping = {i: cls_name for i, cls_name in enumerate(class_list)}        
+        
     if class_list is None:
         print("class_lsit is not specified. There will be a class indicies instead of class names on the visualizations")
 
@@ -162,44 +223,34 @@ def run_inference(
     if img_names_to_detect is None:
         img_names_to_detect = os.listdir(img_dir)
 
-    dataloader = create_dataloader(
-        img_dir,
-        config['input_size'][0],
-        config['batch_size'],
-        config['stride'],
-        pad=config['pad'],
-        rect=detector._model.pt,
-        workers=1,
-        # prefix=color[0]str(f'{task}: ')
-    )[0]
-
     predictions = dict()
-    for i, (img, targets, paths, shapes) in enumerate(tqdm(dataloader, desc="Predicting")):
-        img_names = [path.split('/')[-1] for path in paths]
-        img_base_names = [img_name.split('.')[0] for img_name in img_names]
-
-        predictions_batch = detector.forward_image(img, shapes)
-
-        for img_base_name, prediction in zip(img_base_names, predictions_batch):
-            predictions[img_base_name] = prediction
+    for img_name in tqdm(img_names_to_detect, desc="Predicting"):
+        
+        img_base_name = os.path.splitext(img_name)[0]
+        img_path = os.path.join(img_dir, img_name)
+        try:
+            img = cv2.imread(img_path)
+        except Error as e:
+            print('img_name', img_name, file = sys.stderr)
+            raise(e)
+        prediction = detector.forward_image(img)
+        predictions[img_base_name] = prediction
         
         if visualizations_dir is not None:
-            for path, img_name, prediction in zip(paths, img_names, predictions_batch):
-                img = cv2.imread(path)
-                if len(prediction) > 0:
-                    limage = detection_to_labeled_image(
-                        detections=prediction,
-                        img_name=img_name,
-                        width=img.shape[1],
-                        height=img.shape[0],
-                        detection_label_to_class_name=detection_id_to_label_mapping,
-                        conf_threshold=conf_threshold,
-                    )
-                    img = draw_bboxes_on_image(
-                        labeled_image=limage,
-                        img=img,
-                    )
-                cv2.imwrite(os.path.join(visualizations_dir, img_name), img)
+            if len(prediction) > 0:
+                limage = detection_to_labeled_image(
+                    detections=prediction,
+                    img_name=img_name,
+                    width=img.shape[1],
+                    height=img.shape[0],
+                    detection_label_to_class_name=detection_id_to_label_mapping,
+                    conf_threshold=conf_threshold,
+                )
+                img = draw_bboxes_on_image(
+                    labeled_image=limage,
+                    img=img,
+                )
+            cv2.imwrite(os.path.join(visualizations_dir, img_name), img)
 
     if predictions_dir is not None:
         os.makedirs(predictions_dir, exist_ok=True)
