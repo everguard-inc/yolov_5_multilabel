@@ -1,5 +1,7 @@
 import os
 import cv2
+import yaml
+import json
 import torch
 import argparse
 import numpy as np
@@ -13,6 +15,7 @@ from collections import defaultdict
 from tqdm import tqdm
 from tabulate import tabulate
 
+
 from utils.sort import Sort
 from utils.datasets import LoadImages
 from utils.torch_utils import select_device
@@ -20,10 +23,29 @@ from utils.general import non_max_suppression, scale_coords
 from models.common import DetectMultiBackend
 
 
-from eg_data_tools.os_utils.get_free_gpu import get_free_gpu_id
 from eg_data_tools.data_units.data_units import LabeledImage, BBox
 from eg_data_tools.visualization.media.image import draw_bboxes_on_image
-from eg_data_tools.filesystem_utils.transform.read_write import load_yaml, open_csv, save_json
+
+
+def load_yaml(path: str):
+    with open(path, "r") as stream:
+        content = yaml.load(stream, Loader=yaml.FullLoader)
+    return content
+
+def open_csv(names_file_path):
+    with open(names_file_path, "r") as text_file:
+        rows = text_file.readlines()
+    for i, line in enumerate(rows):
+        rows[i] = line.replace("\n", "").split(",")
+    return rows
+
+def save_json(
+    value,
+    file_path,
+):
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    with open(file_path, "w") as filename:
+        json.dump(value, filename, indent=4)
 
 
 def setup_config(
@@ -31,6 +53,7 @@ def setup_config(
     weights_path: str,
     input_size: Tuple[int, int],
     device_id: int,
+    agnostic_nms: bool = True,
     iou_thres: float = 0.3,
     conf_thres: float = 0.5,
 ) -> Dict[str, Any]:
@@ -41,7 +64,7 @@ def setup_config(
     config['weights'] = weights_path
     config['iou_thres'] = iou_thres
     config['nms_conf_thres'] = conf_thres
-    config['agnostic_nms'] = True
+    config['agnostic_nms'] = agnostic_nms
     
     return config
 
@@ -157,9 +180,10 @@ def run_evaluation(
     viz_dir_path: str = None,
     model_config_path: str = None,
     tracker_config_path: str = None,
-    device_id: int = None,
+    device_id: int = 0,
     iou_thres: float = 0.3,
     conf_thres: float = 0.5,
+    agnostic_nms: bool = True,
     target_class: str = 'not_in_hardhat',
     false_actions_percent_threshold: float = 0.5,
 ) -> NoReturn:  
@@ -175,15 +199,12 @@ def run_evaluation(
             device_id: id of GPU to use
             iou_thres: iou threshold for NMS
             conf_thres: confidence threshold for NMS
+            agnostic_nms: if NMS is agnostic or not. For better tracking results set it to True
             target_class: class to evaluate during event
             false_actions_percent_threshold: threshold for false actions percentage, the higher the threshold, the more false actions are allowed
             video_dir: path to directory with videos 
     """
     print("Loading model...")
-    if device_id is None:
-        device_id = get_free_gpu_id(free_vram_threshold=2000)
-        if device_id is None:
-            raise RuntimeError("No free GPU found")
     
     if model_config_path is None:
         model_config_path = Path(__file__).parent / "config.yaml"
@@ -200,6 +221,7 @@ def run_evaluation(
         iou_thres=iou_thres,
         conf_thres=conf_thres,
         input_size=input_size,
+        agnostic_nms=agnostic_nms,
     )
     
     tracker_config = load_yaml(tracker_config_path)
@@ -328,6 +350,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", type=str, default=None)
     parser.add_argument("--iou_thresh", type=float, default=0.3)
     parser.add_argument("--score_thresh", type=float, default=0.5)
+    parser.add_argument("--agnostic_nms", action='store_true', help="class-agnostic NMS")
     parser.add_argument("--target_class", type=str, help="target class for evaluation")
     parser.add_argument("--false_actions_percent_threshold", type=float, default=0.5)
     
@@ -348,26 +371,10 @@ if __name__ == "__main__":
         model_config_path=args.model_config_path,
         tracker_config_path=args.tracker_config_path,
         device_id=args.device,
+        agnostic_nms=args.agnostic_nms,
         iou_thres=args.iou_thresh,
         conf_thres=args.score_thresh,
         target_class=args.target_class,
         false_actions_percent_threshold=args.false_actions_percent_threshold,
     )
-    
-    # run_evaluation(
-    #     model_path="/media/data3/au/tasks/2023_04_11_parallelize_visualization/yolov5m_2023-03-04-03-18-02_dataset_ppe_seah_hardhat_coco_3x736x736_6b34cc65.pt",
-    #     events_list_path="/home/au/yolov_5_multilabel/data/test_events.csv",
-    #     # events_list_path='/home/au/yolov_5_multilabel/data/CSS events labelling.csv',
-    #     input_size=(736, 736),
-    #     class_names=['in_hardhat', 'not_in_hardhat', 'hardhat_unrecognized'],
-    #     report_path="report.xlsx",
-    #     video_path="/media/data3/au/tasks/2023_04_13_css_validation/test_video/Processing_test_cutted.mkv",
-    #     # video_path='/media/data3/au/tasks/2023_04_13_css_validation/videos_for_labelling',
-    #     viz_dir_path="/media/data3/au/tasks/2023_04_13_css_validation/viz_events",
-    #     model_config_path=None,
-    #     device_id=None,
-    #     iou_thres=0.3,
-    #     conf_thres=0.5,
-    #     target_class='not_in_hardhat',
-    #     false_actions_percent_threshold=0.5
-    # )
+
