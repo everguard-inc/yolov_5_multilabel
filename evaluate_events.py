@@ -377,4 +377,3 @@ if __name__ == "__main__":
         target_class=args.target_class,
         false_actions_percent_threshold=args.false_actions_percent_threshold,
     )
-
