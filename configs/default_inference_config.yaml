@@ -1,0 +1,14 @@
+agnostic_nms: false
+augment: false
+auto_letterbox: false
+classes: null
+classify: false
+device: 2
+half: true
+iou_thres: 0.3
+iou_thres_post: 0.8
+max_det: 1000
+stride: 32
+suffixes:
+- .pt
+- .onnx

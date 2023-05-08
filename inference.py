@@ -4,7 +4,7 @@ from distutils.command.config import config
 import json
 import os
 import sys
-from typing import Any, Dict, NoReturn, Tuple, List
+from typing import Any, Dict, Iterable, NoReturn, Tuple, List
 import cv2
 
 import numpy as np
@@ -66,10 +66,26 @@ class Yolov5MultilabelDetector:
     def _warmup(self) -> NoReturn:
         self._model.warmup(imgsz=(1, 3, *self._input_size), half=self._half)
 
-    def _preprocess(self, img0: np.ndarray) -> np.ndarray:
+    def _preprocess(self, img0: np.ndarray) -> torch.Tensor:
         """
+        Preprocesses an image for input into a YOLOv5 object detection model.
+        
         Args:
-            img: 3-dimentional image in BGR format
+            img0 (np.ndarray): Original 3-dimentional image in BGR format  to be processed. 
+        
+        Returns:
+            im: Preprocessed image as a PyTorch tensor, ready for input into the YOLOv5 model. 
+            im0s: Original image, unchanged and stored for display purposes.
+        
+        Steps:
+            1. Resize and pad the input image using letterboxing.
+            2. Convert the image from HWC (height, width, channels) format to CHW (channels, height, width) format and from BGR to RGB.
+            3. Convert the image to a contiguous array.
+            4. Convert the array to a PyTorch tensor and move it to the device specified during initialization.
+            5. Convert the tensor to float or half precision, depending on the `_half` attribute.
+            6. Scale the pixel values from 0-255 to 0.0-1.0 range.
+            7. If the tensor does not have a batch dimension, add one.
+            8. Return the preprocessed tensor and the original, unprocessed image for display purposes.
         """
 
         # Padded resize
@@ -116,12 +132,15 @@ class Yolov5MultilabelDetector:
     @torch.no_grad()
     def forward_image(self, img: np.ndarray) -> List[np.ndarray]:
         """
+        Args:
+            img (np.ndarray): image in BGR format
+
         returns: [[x, y, w, h, conf, cls], ...]
         """
         # preprocess
         im, im0s = self._preprocess(img)
-
         # Inference
+        # Here `im` is a torch.Tensor with shape [batch_size, channels, input_size, input_size]. Colorspace is RGB
         pred = self._model(im, augment=self._augment, visualize=False)
 
         # NMS
@@ -136,16 +155,33 @@ class Yolov5MultilabelDetector:
 
 
 def run_inference(
-    img_dir,
+    img_dir: str,
     config_path: str,
+    weights: str,
+    conf_threshold: float,
+    input_size: Tuple[int, int],
     predictions_dir: str = None,
     img_names_to_detect: List[str] = None,
-    input_size = None, # inference size h,w
-    weights = None,
-    conf_threshold = None,
     visualizations_dir: str = None,
     class_list: List[str] = None,
-) -> Dict[str, List[int]]:
+) -> Dict[str, List[Dict]]:
+    """
+    Runs object detection on images and saves visualizations and/or predictions.
+
+    Args:
+        img_dir (str): Path to the directory containing the images to be processed.
+        config_path (str): Path to the yaml file containing the configuration.
+        weights (str): Path to the weights file.
+        conf_threshold (float): Detection confidence threshold.
+        input_size (Tuple[int, int]): Input size of the model.
+        predictions_dir (str, optional): Path to the directory where predictions will be saved. If None, predictions not be saved. Default is None. 
+        img_names_to_detect (List[str], optional): List of image names to detect. If None, all images in img_dir will be processed. Default is None.
+        visualizations_dir (str, optional): Path to the directory where visualizations will be saved. Default is None.
+        class_list (List[str], optional): List of class names. Used for visualization. Default is None.
+
+    Returns:
+        Dict[str, List[Dict]]: A dictionary of the form {img_name: detection}. Detection is a list of dictionaries, each representing a detection.
+    """
     
     detection_id_to_label_mapping = None
     if visualizations_dir is not None:
@@ -157,12 +193,12 @@ def run_inference(
 
     config=load_yaml(config_path)
 
-    if weights is not None:
-        config['weights'] = weights
-    if input_size is not None:
-        config['input_size'] = input_size
-    if conf_threshold is not None:
-        config['nms_conf_thres'] = conf_threshold
+    assert isinstance(input_size, Iterable) and len(input_size) == 2, "Specify input_size in format Tuple[int, int]"
+
+    config['weights'] = weights
+    config['input_size'] = input_size
+    config['nms_conf_thres'] = conf_threshold
+
     print('config', config)
     detector = Yolov5MultilabelDetector(config)
 
