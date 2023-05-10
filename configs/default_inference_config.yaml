@@ -12,3 +12,4 @@ stride: 32
 suffixes:
 - .pt
 - .onnx
+pad: 0.5

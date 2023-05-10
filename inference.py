@@ -49,6 +49,7 @@ class Yolov5MultilabelDetector:
         self._classify = config["classify"]  # False
         self._stride = config["stride"]
         self._auto_letterbox = config["auto_letterbox"]
+        self._pad = config['pad']
 
     def _load_model(self) -> NoReturn:
         # Load model
@@ -64,7 +65,7 @@ class Yolov5MultilabelDetector:
         self._warmup()
 
     def _warmup(self) -> NoReturn:
-        self._model.warmup(imgsz=(1, 3, *self._input_size), half=self._half)
+        self._model.warmup(imgsz=(1, 3, self._input_size, self._input_size), half=self._half)
 
     def _preprocess(self, img0: np.ndarray) -> torch.Tensor:
         """
@@ -88,8 +89,18 @@ class Yolov5MultilabelDetector:
             8. Return the preprocessed tensor and the original, unprocessed image for display purposes.
         """
 
-        # Padded resize
-        img = letterbox(img0, self._input_size, stride=self._stride, auto=self._auto_letterbox)[0]
+        # Resize and pad
+        img = None
+        shape0 = img0.shape[:2]
+        shape = np.array(shape0, dtype=float) / max(shape0)
+        shape = np.ceil(shape * self._input_size / self._stride + self._pad).astype(np.int32) * self._stride
+        r = self._input_size / max(shape0)  # ratio
+        if r != 1:  # if sizes are not equal
+            h0, w0 = shape0
+            img = cv2.resize(img0, (int(w0 * r), int(h0 * r)),
+                             interpolation=cv2.INTER_LINEAR)
+        
+        img, ratio, pad = letterbox(img if img is not None else img0, shape, auto=self._auto_letterbox, scaleup=False)
 
         # Convert
         img = img.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB
@@ -103,31 +114,33 @@ class Yolov5MultilabelDetector:
         if len(im.shape) == 3:
             im = im[None]  # expand for batch dim
 
-        return im, im0s
+        return im, im0s, pad
+    
+    @staticmethod
+    def __get_params_for_posprocess(im, im0s, pad):
+        shape = im.shape[2:]
+        h, w = shape
+        w -= 2*pad[0]
+        h -= 2*pad[1]        
+        base_shape = im0s.shape[:2]
+        h0, w0 = base_shape
+        params = ((h / h0, w / w0), pad)
+        return shape, base_shape, params
 
     @staticmethod
-    def _postprocess_detections(pred, im, im0s):
+    def _postprocess_detections(pred, im, im0s, pad):
         detections = list()
-        for i, det in enumerate(pred):
+        shape, base_shape, params = Yolov5MultilabelDetector.__get_params_for_posprocess(im, im0s, pad)
+
+        for _, det in enumerate(pred):
             result = list()
             if len(det):
                 # Rescale boxes from img_size to im0 size
-                det[:, :4] = scale_coords(im.shape[2:], det[:, :4], im0s.shape).round()
-
-                for *xyxy, conf, cls in reversed(det.cpu().numpy().tolist()):
-                    
-                    x1, y1, x2, y2 = xyxy
-                    result.append([
-                        x1, 
-                        y1, 
-                        x2, 
-                        y2, 
-                        conf, 
-                        cls
-                    ]) 
-            
+                # det format: np.array[[x1, y1, x2, y2, conf, cls], ...]
+                det[:, :4] = scale_coords(shape, det[:, :4], base_shape, params).round()
+                result = det.cpu().numpy().tolist()
             detections.append(result) 
-        return detections
+        return detections[0]
 
     @torch.no_grad()
     def forward_image(self, img: np.ndarray) -> List[np.ndarray]:
@@ -138,7 +151,7 @@ class Yolov5MultilabelDetector:
         returns: [[x, y, w, h, conf, cls], ...]
         """
         # preprocess
-        im, im0s = self._preprocess(img)
+        im, im0s, pad = self._preprocess(img)
         # Inference
         # Here `im` is a torch.Tensor with shape [batch_size, channels, input_size, input_size]. Colorspace is RGB
         pred = self._model(im, augment=self._augment, visualize=False)
@@ -148,7 +161,7 @@ class Yolov5MultilabelDetector:
                                    max_det=self._max_det)
 
         # Process predictions
-        pred = self._postprocess_detections(pred, im, im0s)[0]
+        pred = self._postprocess_detections(pred, im, im0s, pad)
 
         return pred
 
@@ -159,7 +172,7 @@ def run_inference(
     config_path: str,
     weights: str,
     conf_threshold: float,
-    input_size: Tuple[int, int],
+    input_size: int,
     predictions_dir: str = None,
     img_names_to_detect: List[str] = None,
     visualizations_dir: str = None,
@@ -193,7 +206,7 @@ def run_inference(
 
     config=load_yaml(config_path)
 
-    assert isinstance(input_size, Iterable) and len(input_size) == 2, "Specify input_size in format Tuple[int, int]"
+    assert isinstance(input_size, int) and input_size > 0, "Specify input_size in format int"
 
     config['weights'] = weights
     config['input_size'] = input_size
@@ -212,7 +225,7 @@ def run_inference(
         img_path = os.path.join(img_dir, img_name)
         try:
             img = cv2.imread(img_path)
-        except Error as e:
+        except Exception as e:
             print('img_name', img_name, file = sys.stderr)
             raise(e)
         prediction = detector.forward_image(img)
@@ -248,7 +261,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--img_dir", type=str, required=True)
     parser.add_argument("--predictions_dir", type=str, required=True)
-    parser.add_argument("--input_size", nargs='+', type=int, help='inference size h,w')
+    parser.add_argument("--input_size", type=int, help='inference size max(h,w)')
     parser.add_argument("--weights", type=str)
     parser.add_argument("--config", type=str)
     parser.add_argument("--tr", type=float)
@@ -261,7 +274,7 @@ if __name__ == "__main__":
     run_inference(
         img_dir=args.img_dir,
         predictions_dir=args.predictions_dir,
-        input_size=args.input_size, # inference size h,w
+        input_size=args.input_size, # inference size max(h,w)
         weights=args.weights,
         conf_threshold=args.tr,
         config_path=args.config,

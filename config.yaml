@@ -1,6 +1,6 @@
 weights: /media/data/vv/models/yolov5m_2022-12-07-20-29-03_dataset_ppe_seah_hardhat_yolo_3x736x736_5160b832.pt
-device: 1 # cuda device, i.e. 0 or 0,1,2,3 or cpu
-input_size: [736, 736] # inference size h,w
+device: 0 # cuda device, i.e. 0 or 0,1,2,3 or cpu
+input_size: 736 # inference size max(h, w)
 nms_conf_thres: 0.4  # confidence threshold
 iou_thres: 0.3  # NMS IOU threshold
 iou_thres_post: 0.8
@@ -13,3 +13,4 @@ classify: False  # False
 suffixes: ['.pt', '.onnx']
 stride: 32
 auto_letterbox: false
+pad: 0.5
