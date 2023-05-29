@@ -1,0 +1,5 @@
+train: /home/rb/multilabel_detection_nucor/data/train/images
+val: /home/rb/multilabel_detection_nucor/data/val/images
+
+nc: 7
+names: ['not_touching_hanging_load', 'hand_touching_hanging_load', 'stick_touching_hanging_load', 'unrecognized_touching', 'holding_remote','not_holding_remote','unrecognized_holding_remote']

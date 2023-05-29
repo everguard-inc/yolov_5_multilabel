@@ -411,7 +411,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         self.stride = stride
         self.path = path
         self.albumentations = Albumentations() if augment else None
-        self.num_classes = 10
+        self.num_classes = 7
         self.multi_label = True
 
         try:
@@ -471,7 +471,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                 x[:, 0] = 0
 
         n = len(shapes)  # number of images
-        bi = np.floor(np.arange(n) / batch_size).astype(np.int)  # batch index
+        bi = np.floor(np.arange(n) / batch_size).astype(int)  # batch index
         nb = bi[-1] + 1  # number of batches
         self.batch = bi  # batch index of image
         self.n = n
@@ -847,7 +847,7 @@ def extract_boxes(path='../datasets/coco128'):  # from utils.datasets import *; 
                     b = x[1:] * [w, h, w, h]  # box
                     # b[2:] = b[2:].max()  # rectangle to square
                     b[2:] = b[2:] * 1.2 + 3  # pad
-                    b = xywh2xyxy(b.reshape(-1, 4)).ravel().astype(np.int)
+                    b = xywh2xyxy(b.reshape(-1, 4)).ravel().astype(int)
 
                     b[[0, 2]] = np.clip(b[[0, 2]], 0, w)  # clip boxes outside of image
                     b[[1, 3]] = np.clip(b[[1, 3]], 0, h)

@@ -22,6 +22,7 @@ import torch.distributed as dist
 import torch.nn as nn
 import yaml
 from torch.cuda import amp
+import neptune
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.optim import Adam, SGD, lr_scheduler
 from tqdm import tqdm
@@ -39,7 +40,7 @@ from utils.datasets import create_dataloader
 from utils.general import labels_to_class_weights, increment_path, labels_to_image_weights, init_seeds, \
     strip_optimizer, get_latest_run, check_dataset, check_git_status, check_img_size, check_requirements, \
     check_file, check_yaml, check_suffix, print_args, print_mutation, set_logging, one_cycle, colorstr, methods,xywh2xyxy
-
+from datetime import datetime
 import cv2
 from utils.downloads import attempt_download
 from utils.loss import ComputeLoss
@@ -56,6 +57,10 @@ LOCAL_RANK = int(os.getenv('LOCAL_RANK', -1))  # https://pytorch.org/docs/stable
 RANK = int(os.getenv('RANK', -1))
 WORLD_SIZE = int(os.getenv('WORLD_SIZE', 1))
 
+NEPTUNE_RUN = neptune.init_run(
+    project="platezhkina13/nucor-yolo-multilabel",
+    api_token="eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI3MWU0OTI0ZC00MjlkLTRmYjktYTc5Yi0yOGUzZjVjZGQzZGUifQ==",
+)
 
 def train(hyp,  # path/to/hyp.yaml or hyp dictionary
           opt,
@@ -209,7 +214,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 
     # Trainloader
     train_loader, dataset = create_dataloader(train_path, imgsz, batch_size, gs, single_cls,
-                                              hyp=hyp, augment=True, cache=opt.cache, rect=False, rank=RANK,
+                                              hyp=hyp, augment=False, cache=opt.cache, rect=False, rank=RANK,
                                               workers=workers, image_weights=opt.image_weights, quad=opt.quad,
                                               prefix=colorstr('train: '))
     #mlc = int(np.concatenate(dataset.labels, 0)[:, 0].max())  # max label class
@@ -249,7 +254,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     model.nc = nc  # attach number of classes to model
     model.hyp = hyp  # attach hyperparameters to model
     class_weights = labels_to_class_weights(dataset.labels, nc).to(device)  # attach class weights
-    unrecognized_classes = [2,5,8]
+    unrecognized_classes = [3,6]
     unrecognized_difference = 0
     for class_ind in unrecognized_classes: 
         unrecognized_difference+= class_weights[class_ind] - 0.005
@@ -259,7 +264,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
         if class_ind in unrecognized_classes:
             continue
         else:
-            class_weights[class_ind]+= unrecognized_difference/7
+            class_weights[class_ind]+= unrecognized_difference/5
 
     model.class_weights = class_weights * nc
     model.names = names
@@ -356,7 +361,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             final_epoch = (epoch + 1 == epochs) or stopper.possible_stop
             if not noval or final_epoch:  # Calculate f1
                 f1_05,loss = val.run(data_dict,
-                                           batch_size=batch_size,
+                                           batch_size=15,
                                            imgsz=imgsz,
                                            model=ema.ema,
                                            single_cls=single_cls,
@@ -369,13 +374,21 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                                            compute_loss=compute_loss)
             f1_round,loss_round = [round(el,3) for el in f1_05],[round(el,7) for el in loss]
             print(f'\nf1_05 = {f1_round}, loss = {loss_round}\n')
-            fi = (f1_round[0]+f1_round[1]+f1_round[3]+f1_round[4]+f1_round[6]+\
-                f1_round[7]+f1_round[9])/7
+            label_names = [
+                'not_touching_hanging_load', 
+                'hand_touching_hanging_load', 
+                'stick_touching_hanging_load', 
+                'unrecognized_touching', 
+                'holding_remote',
+                'not_holding_remote',
+                'unrecognized_holding_remote'
+            ]
+            for label_index in range(len(f1_round)):
+                NEPTUNE_RUN['/'.join(['val', label_names[label_index], 'f1_score'])].log(round(f1_round[label_index],3))
+            fi = (f1_round[0]+f1_round[1]+f1_round[2]+f1_round[4]+f1_round[5])/5
             if fi >= best_fitness:
                 best_fitness = fi
                 best_metrics = f1_round
-            print('best f1 = ',best_metrics)
-            # Save model
             if (not nosave) or (final_epoch and not evolve):  # if save
                 ckpt = {'epoch': epoch,
                         'best_fitness': best_fitness,
@@ -383,11 +396,14 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                         'ema': deepcopy(ema.ema).half(),
                         'updates': ema.updates,
                         'optimizer': optimizer.state_dict(),
-                        'wandb_id': loggers.wandb.wandb_run.id if loggers.wandb else None}
+                        'wandb_id': loggers.wandb.wandb_run.id if loggers.wandb else None,
+                        'date': datetime.now().isoformat()}
 
                 # Save last, best and delete
                 torch.save(ckpt, last)
                 if best_fitness == fi:
+                    print('BEST F1 = ',best_metrics)
+                    print("SAVE BEST CKPT")
                     torch.save(ckpt, best)
                 del ckpt
                 callbacks.run('on_model_save', last, epoch, final_epoch, best_fitness, fi)
@@ -438,9 +454,9 @@ def parse_opt(known=False):
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', type=str, default='yolov5m.pt', help='initial weights path')
     parser.add_argument('--cfg', type=str, default='models/yolov5m.yaml', help='model.yaml path')
-    parser.add_argument('--data', type=str, default='data/coco128.yaml', help='dataset.yaml path')
+    parser.add_argument('--data', type=str, default='data/data.yaml', help='dataset.yaml path')
     parser.add_argument('--hyp', type=str, default='data/hyps/hyp.scratch.yaml', help='hyperparameters path')
-    parser.add_argument('--epochs', type=int, default=300)
+    parser.add_argument('--epochs', type=int, default=80)
     parser.add_argument('--batch-size', type=int, default=16, help='total batch size for all GPUs')
     parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=736, help='train, val image size (pixels)')
     parser.add_argument('--rect', action='store_true', help='rectangular training')
@@ -452,13 +468,13 @@ def parse_opt(known=False):
     parser.add_argument('--bucket', type=str, default='', help='gsutil bucket')
     parser.add_argument('--cache', type=str, nargs='?', const='ram', help='--cache images in "ram" (default) or "disk"')
     parser.add_argument('--image-weights', action='store_true', default=True ,help='use weighted image selection for training')
-    parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
+    parser.add_argument('--device', default='cuda:0', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--multi-scale', action='store_true', help='vary img-size +/- 50%%')
     parser.add_argument('--single-cls', action='store_true', help='train multi-class data as single-class')
     parser.add_argument('--adam', action='store_true', help='use torch.optim.Adam() optimizer')
     parser.add_argument('--sync-bn', action='store_true', help='use SyncBatchNorm, only available in DDP mode')
     parser.add_argument('--workers', type=int, default=8, help='maximum number of dataloader workers')
-    parser.add_argument('--project', default='runs/train', help='save to project/name')
+    parser.add_argument('--project', default='runs_2/train', help='save to project/name')
     parser.add_argument('--entity', default=None, help='W&B entity')
     parser.add_argument('--name', default='exp', help='save to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
@@ -471,7 +487,7 @@ def parse_opt(known=False):
     parser.add_argument('--artifact_alias', type=str, default="latest", help='version of dataset artifact to be used')
     parser.add_argument('--local_rank', type=int, default=-1, help='DDP parameter, do not modify')
     parser.add_argument('--freeze', type=int, default=0, help='Number of layers to freeze. backbone=10, all=24')
-    parser.add_argument('--patience', type=int, default=100, help='EarlyStopping patience (epochs without improvement)')
+    parser.add_argument('--patience', type=int, default=25, help='EarlyStopping patience (epochs without improvement)')
     opt = parser.parse_known_args()[0] if known else parser.parse_args()
     return opt
 
