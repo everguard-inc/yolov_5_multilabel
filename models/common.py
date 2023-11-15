@@ -393,12 +393,20 @@ class DetectMultiBackend(nn.Module):
                 output_details = interpreter.get_output_details()  # outputs
         self.__dict__.update(locals())  # assign all variables to self
 
-    def forward(self, im, augment=False, visualize=False, val=False):
+    def forward(self, im, augment=False, visualize=False, val=False, diagonal_features=False):
         # YOLOv5 MultiBackend inference
         b, ch, h, w = im.shape  # batch, channel, height, width
         if self.pt or self.jit:  # PyTorch
-            y = self.model(im) if self.jit else self.model(im, augment=augment, visualize=visualize)
-            return y if val else y[0]
+            if self.jit:
+                y = self.model(im)
+            else:
+                if diagonal_features:
+                    y, f = self.model(im, augment=augment, visualize=visualize, diagonal_features=diagonal_features)
+                    return y[0], f
+                else:
+                    y = self.model(im)
+                    return y if val else y[0]
+                    
         elif self.dnn:  # ONNX OpenCV DNN
             im = im.cpu().numpy()  # torch to numpy
             self.net.setInput(im)
